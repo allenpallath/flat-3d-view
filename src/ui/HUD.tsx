@@ -6,6 +6,7 @@ import { roomAt } from '../data/geometry'
 import type { PointType } from '../data/schema'
 import { useMeasure } from './measureStore'
 import { useUI } from './uiStore'
+import PerfHUD from './PerfHUD'
 import './ui.css'
 
 const WELCOME_KEY = 'flat-c-welcome-v1'
@@ -137,6 +138,7 @@ export default function HUD() {
         </div>
       </div>
 
+      <PerfHUD />
       {!welcomeSeen && (
         <div className="ui-panel ui-welcome" role="dialog" aria-labelledby="ui-welcome-title">
           <h2 id="ui-welcome-title">Welcome to your Type C flat</h2>

@@ -17,6 +17,7 @@ const IGNORE = { measureIgnore: true }
 const noRaycast = () => null
 const Z_UP = new THREE.Vector3(0, 0, 1)
 const tmpV = new THREE.Vector3()
+const tmpN = new THREE.Vector3()
 
 function isIgnored(o: THREE.Object3D | null): boolean {
   for (let p = o; p; p = p.parent) {
@@ -84,7 +85,7 @@ function Ring({ n, color }: { n: Vec3; color: string }) {
   const ref = useRef<THREE.Group>(null)
   useScreenScale(ref, 12)
   useLayoutEffect(() => {
-    ref.current?.quaternion.setFromUnitVectors(Z_UP, new THREE.Vector3(...n).normalize())
+    ref.current?.quaternion.setFromUnitVectors(Z_UP, tmpN.set(n[0], n[1], n[2]).normalize())
   }, [n])
   return (
     <group ref={ref}>
@@ -141,6 +142,7 @@ function Interaction() {
     const el = gl.domElement
     const ndc = new THREE.Vector2()
     const nrm = new THREE.Vector3()
+    const cands: Vec3[] = [] // reused snap-candidate list (pick runs per pointermove / per frame)
 
     const pick = (clientX: number, clientY: number, shift: boolean): Hover | null => {
       if (document.pointerLockElement) ndc.set(0, 0)
@@ -162,7 +164,8 @@ function Interaction() {
         p = l.point
         axis = l.axis
       } else {
-        const cands: Vec3[] = list.flatMap((m) => [m.a, m.b])
+        cands.length = 0
+        for (const m of list) cands.push(m.a, m.b)
         if (start) cands.push(start)
         const s = snapToNearest(p, cands, SNAP_RADIUS_M)
         if (s) {
@@ -239,9 +242,12 @@ function Interaction() {
     }
   }, [gl, camera, scene, raycaster])
 
-  // pointer-lock walk: aim with the crosshair, so re-pick the centre every frame
+  // pointer-lock walk: aim with the crosshair, so re-pick the centre whenever the camera moved
+  const lastCam = useMemo(() => new THREE.Matrix4(), [])
   useFrame(() => {
     if (!document.pointerLockElement || !pickRef.current) return
+    if (lastCam.equals(camera.matrixWorld)) return
+    lastCam.copy(camera.matrixWorld)
     const h = pickRef.current(0, 0, last.current?.shift ?? false)
     setHover((prev) => (sameHover(prev, h) ? prev : h))
   })

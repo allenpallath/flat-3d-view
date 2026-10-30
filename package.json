@@ -9,6 +9,7 @@
     "preview": "vite preview --host",
     "test": "vitest run",
     "e2e": "node tests/e2e/screenshots.mjs",
+    "e2e:memory": "node tests/e2e/memory.mjs",
     "deploy": "bash scripts/deploy-pages.sh"
   },
   "dependencies": {

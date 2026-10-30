@@ -121,10 +121,18 @@ export interface BuildOpts {
   roughness?: boolean
 }
 
+// Resolution multiplier applied to every generator's `w`/`h` (1 = full, 0.5 = phones / low quality).
+// Generators work in u,v space, so the pattern is resolution independent.
+let texScale = 1
+export function setTextureScale(s: number) {
+  texScale = s
+}
+export const getTextureScale = () => texScale
+
 /** Run a pixel generator and return raw RGBA colour / roughness / normal buffers. */
 export function buildRaw(fn: PixelFn, opts: BuildOpts): RawSet {
-  const w = opts.w
-  const h = opts.h ?? opts.w
+  const w = Math.max(8, Math.round(opts.w * texScale))
+  const h = Math.max(8, Math.round((opts.h ?? opts.w) * texScale))
   const n = w * h
   const col = new Uint8Array(n * 4)
   const rough = opts.roughness === false ? undefined : new Uint8Array(n * 4)
@@ -155,7 +163,8 @@ export function buildRaw(fn: PixelFn, opts: BuildOpts): RawSet {
   const raw: RawSet = { w, h, size: opts.size, col, rough }
   if (height) {
     const nm = new Uint8Array(n * 4)
-    const s = opts.normal!
+    // height differences between neighbouring texels grow as resolution drops: keep the slope constant
+    const s = opts.normal! * (w / opts.w)
     for (let y = 0; y < h; y++) {
       const ym = ((y - 1 + h) % h) * w
       const yp = ((y + 1) % h) * w

@@ -315,3 +315,15 @@
     display: none;
   }
 }
+
+/* ?perf overlay (top-left, under any tool panel; never takes pointer events) */
+.ui-perf {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 40;
+  padding: 6px 8px;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  pointer-events: none;
+  min-width: 96px;
+}

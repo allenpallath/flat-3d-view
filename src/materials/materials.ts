@@ -1,4 +1,6 @@
 import * as THREE from 'three'
+import { invalidate } from '@react-three/fiber'
+import { useStore } from '../store'
 import type { RawSet } from './textures'
 import type { TexSetName } from './generators'
 import type { Quality } from '../data/schema'
@@ -77,6 +79,22 @@ interface Binding {
 const bindings: [MaterialKey, Binding][] = []
 const bind = (key: MaterialKey, b: Binding) => bindings.push([key, b])
 
+// Memory: each DataTexture's pixel buffer is released right after its GPU upload (`onUpdate`), so the
+// ~57 MB of CPU copies do not stay in the JS heap. What is kept to rebuild them is just the set name
+// and the resolution tier (the generators are deterministic). On WebGL context loss the GPU copies
+// are gone too, so on `webglcontextrestored` every set is regenerated into the same texture objects.
+// Resolution tier: half size on touch devices (pointer: coarse) or quality 'low'. Changing quality on a
+// desktop regenerates the sets at the new size and disposes the old textures.
+
+type SetTextures = { map: THREE.DataTexture; rough: THREE.DataTexture | null; normal: THREE.DataTexture | null }
+const live = new Map<TexSetName, SetTextures>()
+
+function releasePixels(t: THREE.Texture) {
+  // keep width/height (three reads them for mip/size bookkeeping); drop the pixel buffer
+  const img = t.image as { data: Uint8Array | null; width: number; height: number }
+  img.data = null
+}
+
 function dataTex(data: Uint8Array, raw: RawSet, srgb: boolean) {
   const t = new THREE.DataTexture(data, raw.w, raw.h, THREE.RGBAFormat, THREE.UnsignedByteType)
   t.wrapS = t.wrapT = THREE.RepeatWrapping
@@ -86,19 +104,38 @@ function dataTex(data: Uint8Array, raw: RawSet, srgb: boolean) {
   t.anisotropy = 8
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace
   t.repeat.set(1 / raw.size[0], 1 / raw.size[1])
+  t.onUpdate = releasePixels
   t.needsUpdate = true
   return t
+}
+
+/** Refill an existing texture (same size) after context loss; three re-uploads it on next use. */
+function refill(t: THREE.DataTexture | null, data: Uint8Array | undefined, raw: RawSet) {
+  if (!t || !data) return
+  const img = t.image as { data: Uint8Array | null; width: number; height: number }
+  if (img.width !== raw.w || img.height !== raw.h) return
+  img.data = data
+  t.needsUpdate = true
 }
 
 let resolveReady: () => void = () => {}
 /** Resolves once every procedural texture has been generated and applied. */
 export const texturesReady: Promise<void> = new Promise((r) => (resolveReady = r))
 
-function applySet(name: TexSetName, raw: RawSet) {
+function applySet(name: TexSetName, raw: RawSet, restore: boolean) {
   if (!cache) return
+  const old = live.get(name)
+  if (restore && old && old.map.image.width === raw.w) {
+    refill(old.map, raw.col, raw)
+    refill(old.rough, raw.rough, raw)
+    refill(old.normal, raw.normal, raw)
+    invalidate()
+    return
+  }
   const map = dataTex(raw.col, raw, true)
   const rough = raw.rough ? dataTex(raw.rough, raw, false) : null
   const normal = raw.normal ? dataTex(raw.normal, raw, false) : null
+  live.set(name, { map, rough, normal })
   for (const [key, b] of bindings) {
     if (b.set !== name) continue
     const m = cache[key] as THREE.MeshStandardMaterial
@@ -114,49 +151,102 @@ function applySet(name: TexSetName, raw: RawSet) {
     m.color.set(b.tint)
     m.needsUpdate = true
   }
+  // the materials now point at the new maps: free the previous GPU textures
+  if (old) {
+    old.map.dispose()
+    old.rough?.dispose()
+    old.normal?.dispose()
+  }
+  invalidate() // frameloop="demand": show the new maps now
 }
 
+const coarsePointer = () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+const scaleFor = (q: Quality) => (coarsePointer() || q === 'low' ? 0.5 : 1)
+
 let loadStarted = false
-function startTextureLoad() {
-  if (loadStarted) return
-  loadStarted = true
-  if (typeof window === 'undefined') return resolveReady() // node / tests: flat colours only
+let gen = 0 // bumps on every (re)generation request; results of older requests are discarded
+let genScale = 1
+let pendingCount = 0
+let worker: Worker | null = null
+let regenTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Number of texture sets still being generated (0 = idle). For perf tools / tests. */
+export const texturesPending = () => pendingCount
+/** Current texture resolution multiplier (1 or 0.5). */
+export const textureScale = () => genScale
+
+function setOrder(): TexSetName[] {
   const order: TexSetName[] = []
   for (const [, b] of bindings) if (!order.includes(b.set)) order.push(b.set)
+  return order
+}
+
+function generate(scale: number, restore: boolean) {
+  const myGen = ++gen
+  genScale = scale
+  worker?.terminate()
+  worker = null
+  const order = setOrder()
   const pending = new Set(order)
+  pendingCount = pending.size
   const done = (name: TexSetName, raw: RawSet) => {
-    if (!pending.has(name)) return
+    if (myGen !== gen || !pending.has(name)) return
     pending.delete(name)
-    applySet(name, raw)
+    pendingCount = pending.size
+    applySet(name, raw, restore)
     if (pending.size === 0) {
       worker?.terminate()
+      worker = null
       resolveReady()
     }
   }
   const mainThread = async () => {
     const { GENERATORS } = await import('./generators')
+    const { setTextureScale } = await import('./textures')
     for (const name of [...pending]) {
       await new Promise((r) => setTimeout(r, 0))
+      if (myGen !== gen) return
+      setTextureScale(scale)
       done(name, GENERATORS[name]())
     }
   }
-  let worker: Worker | null = null
   try {
-    worker = new Worker(new URL('./texWorker.ts', import.meta.url), { type: 'module' })
-    worker.onmessage = (e: MessageEvent<{ name: TexSetName; raw: RawSet }>) => done(e.data.name, e.data.raw)
-    worker.onerror = () => {
-      worker?.terminate()
-      worker = null
-      void mainThread()
+    const w = new Worker(new URL('./texWorker.ts', import.meta.url), { type: 'module' })
+    worker = w
+    w.onmessage = (e: MessageEvent<{ name: TexSetName; raw: RawSet; gen: number }>) => done(e.data.name, e.data.raw)
+    w.onerror = () => {
+      w.terminate()
+      if (worker === w) worker = null
+      if (myGen === gen) void mainThread()
     }
-    worker.postMessage({ names: order })
+    w.postMessage({ names: order, scale, gen: myGen })
   } catch {
     void mainThread()
   }
 }
 
+function startTextureLoad() {
+  if (loadStarted) return
+  loadStarted = true
+  if (typeof window === 'undefined') return resolveReady() // node / tests: flat colours only
+  generate(scaleFor(currentQuality), false)
+  // GPU copies are lost with the context and the CPU copies were released: rebuild them.
+  // (capture phase: the event is dispatched on the canvas and does not bubble)
+  window.addEventListener('webglcontextrestored', () => generate(genScale, true), true)
+}
+
+/** Debounced: regenerate at the tier for `q` if it differs from what is loaded / loading. */
+function requestTier(q: Quality) {
+  if (!loadStarted || typeof window === 'undefined') return
+  clearTimeout(regenTimer)
+  regenTimer = setTimeout(() => {
+    const s = scaleFor(q)
+    if (s !== genScale) generate(s, false)
+  }, 250)
+}
+
 // ---------------------------------------------------------------- materials
-let currentQuality: Quality = 'high'
+let currentQuality: Quality = useStore.getState().quality ?? 'high'
 
 /**
  * Thin architectural glass without a transmission pass (which re-renders the whole scene and blurs it).
@@ -274,6 +364,7 @@ export function getMaterials(): Record<MaterialKey, THREE.Material> {
  */
 export function applyQuality(q: Quality) {
   currentQuality = q
+  requestTier(q)
   if (!cache) return
   for (const k of ['fabricBlue', 'fabricLight'] as const) {
     const m = cache[k] as THREE.MeshPhysicalMaterial
