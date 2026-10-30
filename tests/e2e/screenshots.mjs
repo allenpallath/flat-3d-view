@@ -4,7 +4,8 @@
 // with the floor-plan overlay on, writes them to screenshots/, and exits 1 on page/console errors.
 //
 // Env: E2E_PORT (default 5186), E2E_OUT (default <repo>/screenshots), E2E_URL (use an already running server),
-//      E2E_QUALITY (low|high, default low: headless software GL is slow), E2E_SIZE (default 1024x640).
+//      E2E_QUALITY (low|high, default low: headless software GL is slow), E2E_SIZE (default 1024x640),
+//      E2E_FRAMES (frames to wait before each capture, default 2), E2E_FULLPAGE=1 (page screenshots incl. DOM UI).
 import { createRequire } from 'module'
 import { execSync } from 'child_process'
 import { mkdirSync, writeFileSync } from 'fs'
@@ -85,7 +86,7 @@ try {
   })
 
   // Wait for a few real animation frames (R3F renders inside rAF), however slow software GL is.
-  const frames = (n = 3) =>
+  const frames = (n = Number(process.env.E2E_FRAMES ?? 2)) =>
     page.evaluate(
       (n) => new Promise((r) => { let i = 0; const f = () => (++i >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f) }),
       n,
