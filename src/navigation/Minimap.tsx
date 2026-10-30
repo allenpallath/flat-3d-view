@@ -44,7 +44,9 @@ const panel: React.CSSProperties = {
 }
 const btn: React.CSSProperties = {
   background: 'rgba(255,255,255,0.08)',
-  border: '1px solid rgba(255,255,255,0.14)',
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: 'rgba(255,255,255,0.14)',
   color: '#fff',
   borderRadius: 6,
   padding: '3px 7px',
@@ -54,8 +56,7 @@ const btn: React.CSSProperties = {
   lineHeight: 1.3,
 }
 
-const useSmallScreen = () => {
-  const q = '(max-width: 640px)'
+const useMedia = (q: string) => {
   const [small, setSmall] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(q).matches)
   useEffect(() => {
     const m = window.matchMedia?.(q)
@@ -66,6 +67,7 @@ const useSmallScreen = () => {
   }, [])
   return small
 }
+const useSmallScreen = () => useMedia('(max-width: 640px)')
 
 function teleportTo(x: number, z: number, yawDeg?: number) {
   const s = useStore.getState()
@@ -146,17 +148,41 @@ function MapSvg({ width }: { width: number }) {
 
 export default function Minimap() {
   const small = useSmallScreen()
+  const phone = useMedia('(max-width: 480px)')
+  const [open, setOpen] = useState(!phone)
   const [mapOpen, setMapOpen] = useState(true)
   const [listOpen, setListOpen] = useState(!small)
   useEffect(() => setListOpen(!small), [small])
+  useEffect(() => setOpen(!phone), [phone])
   const playerRoom = useStore((s) => roomAt(planC, s.player.x, s.player.z)?.id)
   const width = small ? 150 : 204
+
+  if (!open)
+    return (
+      <>
+        <button
+          data-testid="minimap-toggle"
+          style={{ ...btn, position: 'fixed', top: 12, right: 12, zIndex: 15, padding: '6px 9px', background: 'rgba(20,22,26,0.82)', backdropFilter: 'blur(8px)' }}
+          onClick={() => setOpen(true)}
+          title="Show map"
+          aria-label="Show map"
+        >
+          Map
+        </button>
+        <TouchControls />
+      </>
+    )
 
   return (
     <>
       <div style={{ ...panel, width: mapOpen ? width : undefined }} data-testid="minimap">
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: mapOpen || listOpen ? 6 : 0 }}>
           <span style={{ fontWeight: 600, flex: 1, whiteSpace: 'nowrap' }}>{mapOpen ? (SHORT[playerRoom ?? ''] ?? 'Map') : ''}</span>
+          {phone && (
+            <button style={btn} onClick={() => setOpen(false)} title="Close" aria-label="Close map">
+              ✕
+            </button>
+          )}
           <button style={btn} onClick={() => setMapOpen((v) => !v)} title={mapOpen ? 'Hide map' : 'Show map'}>
             {mapOpen ? 'Map ▴' : 'Map ▾'}
           </button>
@@ -174,7 +200,10 @@ export default function Minimap() {
                 <button
                   key={r.id}
                   style={{ ...btn, ...(on ? { background: ACCENT, color: '#1b1c1f', borderColor: ACCENT } : null) }}
-                  onClick={() => teleportTo(c.x, c.z)}
+                  onClick={() => {
+                    teleportTo(c.x, c.z)
+                    if (phone) setOpen(false)
+                  }}
                   title={`Walk to ${r.name}`}
                 >
                   {SHORT[r.id] ?? r.name}

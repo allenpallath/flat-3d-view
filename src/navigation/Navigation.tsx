@@ -33,6 +33,9 @@ const B = planBounds(planC)
 const CENTER = { x: (B.x1 + B.x2) / 200, z: (B.z1 + B.z2) / 200 } // metres
 const SPAN = { x: (B.x2 - B.x1) / 100, z: (B.z2 - B.z1) / 100 }
 
+/** set by the furniture planner (A4) while a transform gizmo is being dragged */
+const gizmoDragging = () => !!(window as unknown as { __gizmoDragging?: boolean }).__gizmoDragging
+
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 
 function useColliders() {
@@ -55,6 +58,7 @@ const MOVE_KEYS: Record<string, [number, number]> = {
 function WalkController({ active }: { active: boolean }) {
   const camera = useThree((s) => s.camera)
   const gl = useThree((s) => s.gl)
+  const getThree = useThree((s) => s.get)
   const colliders = useColliders()
   const collRef = useRef(colliders)
   collRef.current = colliders
@@ -63,6 +67,15 @@ function WalkController({ active }: { active: boolean }) {
   const keys = useRef(new Set<string>())
   const lastWrite = useRef(0)
   const tween = useRef<{ t: number; pos: THREE.Vector3; quat: THREE.Quaternion } | null>(null)
+  const lastTeleport = useRef(-1e9)
+
+  /** Put the camera exactly at the walker's eye (no tween). */
+  const snapCamera = () => {
+    const cam = getThree().camera
+    cam.position.set(walkState.x / 100, useStore.getState().eyeHeight / 100, walkState.z / 100)
+    cam.quaternion.setFromEuler(new THREE.Euler(walkState.pitch * DEG, walkState.yaw * DEG, 0, 'YXZ'))
+    cam.updateMatrixWorld()
+  }
 
   // keep a valid start position
   useEffect(() => {
@@ -75,7 +88,11 @@ function WalkController({ active }: { active: boolean }) {
   // smooth transition when entering walk mode
   useEffect(() => {
     if (active) {
-      tween.current = { t: 0, pos: camera.position.clone(), quat: camera.quaternion.clone() }
+      // a teleport that came with the mode switch (minimap click) jumps straight there
+      if (performance.now() - lastTeleport.current < 1000) {
+        tween.current = null
+        snapCamera()
+      } else tween.current = { t: 0, pos: camera.position.clone(), quat: camera.quaternion.clone() }
       if (camera instanceof THREE.PerspectiveCamera) camera.updateProjectionMatrix()
     } else {
       keys.current.clear()
@@ -96,6 +113,9 @@ function WalkController({ active }: { active: boolean }) {
         walkState.vx = walkState.vz = 0
         if (t.yawDeg != null) walkState.yaw = t.yawDeg
         walkState.pitch = -5
+        lastTeleport.current = performance.now()
+        tween.current = null
+        if (s.mode === 'walk') snapCamera()
         s.set({ player: { x: Math.round(p.x), z: Math.round(p.z), yawDeg: Math.round(walkState.yaw) } })
       }),
     [],
@@ -138,7 +158,7 @@ function WalkController({ active }: { active: boolean }) {
       walkState.pitch = THREE.MathUtils.clamp(walkState.pitch - dy * sens, -PITCH_LIMIT, PITCH_LIMIT)
     }
     const onDown = (e: PointerEvent) => {
-      if (!activeRef.current || e.button !== 0 || isLookBlocked() || document.pointerLockElement === el) return
+      if (!activeRef.current || e.button !== 0 || isLookBlocked() || gizmoDragging() || document.pointerLockElement === el) return
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY }
     }
     const onMove = (e: PointerEvent) => {
@@ -148,7 +168,7 @@ function WalkController({ active }: { active: boolean }) {
         return
       }
       if (!drag || e.pointerId !== drag.id) return
-      if (isLookBlocked()) {
+      if (isLookBlocked() || gizmoDragging()) {
         drag = null
         return
       }
