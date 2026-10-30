@@ -118,13 +118,7 @@ export function localMaterials() {
   local = {
     mirror: new THREE.MeshStandardMaterial({ color: '#dfe6ea', roughness: 0.03, metalness: 1, envMapIntensity: 1.4 }),
     blackGlass: new THREE.MeshStandardMaterial({ color: '#0c0d0f', roughness: 0.06, metalness: 0.3 }),
-    frosted: new THREE.MeshPhysicalMaterial({
-      color: '#eef3f4',
-      roughness: 0.55,
-      transmission: 0.6,
-      transparent: true,
-      opacity: 0.7,
-    }),
+    frosted: new THREE.MeshStandardMaterial({ color: '#eef3f4', roughness: 0.6, transparent: true, opacity: 0.35, depthWrite: false }),
     chrome: new THREE.MeshStandardMaterial({ color: '#e8eaec', roughness: 0.12, metalness: 1 }),
     grout: new THREE.MeshStandardMaterial({ color: '#3a3b3d', roughness: 0.6, metalness: 0.4 }),
   }

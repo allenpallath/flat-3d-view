@@ -39,7 +39,7 @@ export const planC: Plan = {
     { id: 'nicheS', kind: 'interior', height: H, rect: { x1: -78, z1: 622, x2: -23, z2: 634 } },
     {
       id: 'westB', kind: 'exterior', height: H, rect: { x1: -23, z1: 622, x2: 0, z2: 923 },
-      openings: [{ id: 'kitchenWin', kind: 'window', from: 720, to: 830, sill: 105, head: DOOR_HEAD }],
+      openings: [{ id: 'kitchenWin', kind: 'window', from: 775, to: 865, sill: 105, head: DOOR_HEAD }],
     },
 
     // ---- North ----

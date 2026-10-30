@@ -42,7 +42,7 @@ function FloorPatchMesh({ p }: { p: FloorPatch }) {
     Infinity,
     [p],
   )
-  return <BMesh built={built} tag={{ kind: 'floor', roomId: p.roomId }} shadows={false} />
+  return <BMesh built={built} tag={{ kind: 'floor', roomId: p.roomId }} />
 }
 
 export default function Floors() {
@@ -67,7 +67,7 @@ export default function Floors() {
       {patches.map((p) => (
         <FloorPatchMesh key={p.key} p={p} />
       ))}
-      <BMesh built={slab} shadows={false} />
+      <BMesh built={slab} />
     </group>
   )
 }
