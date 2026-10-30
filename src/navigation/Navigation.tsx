@@ -319,13 +319,24 @@ function WalkController({ active }: { active: boolean }) {
     if (camera instanceof THREE.PerspectiveCamera) {
       const target = useStore.getState().fov
       const diff = target - camera.fov
+      let dirty = false
       if (Math.abs(diff) > 0.05) {
         camera.fov += diff * (1 - Math.exp(-14 * rawDt))
-        camera.updateProjectionMatrix()
+        dirty = true
       } else if (diff !== 0) {
         camera.fov = target
-        camera.updateProjectionMatrix()
+        dirty = true
       }
+      // Near plane as far out as possible (depth precision, less shimmer) while its corners stay
+      // inside the walker's collision radius, so hugging a wall never clips through it.
+      const tanH = Math.tan((camera.fov * DEG) / 2)
+      const reach = Math.sqrt(1 + tanH * tanH * (1 + camera.aspect * camera.aspect))
+      const near = Math.min(0.1, (PLAYER_RADIUS * 0.009) / reach)
+      if (Math.abs(camera.near - near) > 1e-4) {
+        camera.near = near
+        dirty = true
+      }
+      if (dirty) camera.updateProjectionMatrix()
     }
 
     const tw = tween.current

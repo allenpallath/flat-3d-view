@@ -17,19 +17,22 @@ export default function PostFX() {
     if (ao.current?.configuration) ao.current.configuration.gammaCorrection = false
   })
   if (quality !== 'high') return null
+  const hiDpi = typeof window !== 'undefined' && window.devicePixelRatio >= 1.75
   const overview = mode !== 'walk'
   return (
     <EffectComposer multisampling={0} frameBufferType={HalfFloatType}>
+      {/* Tuned against black flicker while walking: half-res AO is only used on high-DPI screens
+          (where half res is still >= 1 CSS px), more samples + a tighter denoise avoid dark
+          "boiling" blotches, and a gentler intensity keeps any residual noise invisible. */}
       <N8AO
         ref={ao}
-        aoRadius={overview ? 1.2 : 0.6}
-        distanceFalloff={overview ? 1 : 0.5}
-        intensity={overview ? 2.5 : 2.2}
-        aoSamples={12}
-        denoiseSamples={4}
-        denoiseRadius={10}
-        halfRes
-        quality="performance"
+        aoRadius={overview ? 1.2 : 0.5}
+        distanceFalloff={1}
+        intensity={overview ? 2 : 1.4}
+        quality="medium"
+        denoiseRadius={6}
+        halfRes={hiDpi}
+        depthAwareUpsampling
       />
       <Bloom mipmapBlur luminanceThreshold={1.1} luminanceSmoothing={0.3} intensity={0.35} radius={0.7} />
       <ToneMapping mode={ToneMappingMode.AGX} />
