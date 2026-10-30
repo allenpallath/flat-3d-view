@@ -1,12 +1,13 @@
 // OWNER: Furniture Planner agent (A4). 3D layer: placed furniture, selection gizmo, wall distances, placement ghost.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
+import { invalidate, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Html, Line, TransformControls } from '@react-three/drei'
 import type { PlacedItem } from '../data/schema'
 import { useStore } from '../store'
 import { getEntry, itemDims } from './catalog'
-import { FurnitureModel } from './models'
+import { useFurnitureGeometry } from './geoCache'
+import { markShadowsDirty } from '../materials/shadows'
 import { clickGuard, usePlanner } from './plannerStore'
 import { seedIfFirstRun } from './defaultLayout'
 import {
@@ -32,27 +33,112 @@ const normDeg = (d: number) => {
 /** timestamp of the last furniture click (used by the deselect-on-empty-click logic) */
 const lastItemClick = { t: 0 }
 
-function prepare(root: THREE.Object3D, itemId: string) {
-  root.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) {
-      o.castShadow = true
-      o.receiveShadow = true
-      o.userData = { kind: 'furniture', itemId }
+// ------------------------------------------------------------------ LOD
+// Beyond ~5 m (walk mode only) an item shows a low-detail proxy. Checked at most 5×/s, with hysteresis.
+const LOD_FAR = 5.5 // m: switch to the proxy above this (distance to the item's bounding circle)
+const LOD_NEAR = 4.5 // m: back to full detail below this
+const LOD_INTERVAL = 200 // ms
+
+interface LodHandle {
+  item: PlacedItem
+  r: number // m, half the larger footprint side
+  hm: number // m, half the height
+  far: boolean
+  setFar: (v: boolean) => void
+}
+const lodHandles = new Map<string, LodHandle>()
+
+function useLodManager() {
+  const last = useRef(-1e9)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cam = useMemo(() => new THREE.Vector3(), [])
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    [],
+  )
+  useFrame(({ camera }) => {
+    const now = performance.now()
+    if (now - last.current < LOD_INTERVAL) {
+      // render-on-demand: make sure one more frame (and check) happens after the camera stops
+      if (!timer.current) timer.current = setTimeout(() => ((timer.current = null), invalidate()), LOD_INTERVAL)
+      return
     }
+    last.current = now
+    const s = useStore.getState()
+    const walk = s.mode === 'walk'
+    cam.setFromMatrixPosition(camera.matrixWorld)
+    let changed = false
+    for (const [id, h] of lodHandles) {
+      let want = false
+      if (walk && id !== s.selectedId) {
+        const it = h.item
+        const dx = it.x / 100 - cam.x
+        const dy = it.y / 100 + h.hm - cam.y
+        const dz = it.z / 100 - cam.z
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) - h.r
+        want = h.far ? dist > LOD_NEAR : dist > LOD_FAR
+      }
+      if (want !== h.far) {
+        h.far = want
+        h.setFar(want)
+        changed = true
+      }
+    }
+    if (changed) markShadowsDirty()
   })
 }
 
 // ------------------------------------------------------------------ placed item
-const Item = memo(function Item({ item, register }: { item: PlacedItem; register: (id: string, o: THREE.Object3D | null) => void }) {
+const Item = memo(function Item({
+  item,
+  selected,
+  register,
+}: {
+  item: PlacedItem
+  selected: boolean
+  register: (id: string, o: THREE.Object3D | null) => void
+}) {
   const ref = useRef<THREE.Group>(null)
   const dims = itemDims(item)
-  useLayoutEffect(() => {
-    if (ref.current) prepare(ref.current, item.id)
-  })
+  const [farState, setFar] = useState(false)
+  const far = farState && !selected // never LOD the selected item
+  const entry = useFurnitureGeometry({ catalogId: item.catalogId, w: dims.w, d: dims.d, h: dims.h, color: item.color }, far)
+  const userData = useMemo(() => ({ kind: 'furniture', itemId: item.id }), [item.id])
+
   useEffect(() => {
     register(item.id, ref.current)
     return () => register(item.id, null)
   }, [item.id, register])
+
+  // LOD registration (the manager reads the latest item / dims through the handle)
+  const handle = useRef<LodHandle | null>(null)
+  useLayoutEffect(() => {
+    const h: LodHandle = handle.current ?? { item, r: 0, hm: 0, far: false, setFar }
+    h.item = item
+    h.r = Math.max(dims.w, dims.d) / 200
+    h.hm = Math.max(dims.h, 1) / 200
+    handle.current = h
+    lodHandles.set(item.id, h)
+  })
+  useEffect(() => {
+    const id = item.id
+    return () => {
+      lodHandles.delete(id)
+    }
+  }, [item.id])
+
+  // static item: the matrix is only recomputed when it moves (the selected one auto-updates for the gizmo)
+  useLayoutEffect(() => {
+    ref.current?.updateMatrix()
+    invalidate()
+  }, [item.x, item.y, item.z, item.rot, selected])
+
+  // anything that changes what casts shadows: geometry swap (LOD, size, colour)
+  useEffect(() => {
+    markShadowsDirty()
+  }, [entry])
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     const s = useStore.getState()
@@ -69,8 +155,14 @@ const Item = memo(function Item({ item, register }: { item: PlacedItem; register
   }
 
   return (
-    <group ref={ref} position={[item.x / 100, item.y / 100, item.z / 100]} rotation={[0, item.rot * D2R, 0]} onClick={onClick}>
-      <FurnitureModel catalogId={item.catalogId} w={dims.w} d={dims.d} h={dims.h} color={item.color} />
+    <group
+      ref={ref}
+      position={[item.x / 100, item.y / 100, item.z / 100]}
+      rotation={[0, item.rot * D2R, 0]}
+      matrixAutoUpdate={selected}
+      onClick={onClick}
+    >
+      <mesh geometry={entry.geometry} material={entry.materials} userData={userData} castShadow receiveShadow matrixAutoUpdate={false} />
     </group>
   )
 })
@@ -115,6 +207,7 @@ function Gizmo({ item, object }: { item: PlacedItem; object: THREE.Object3D }) {
     if (!c) return
     const cb = (e: { value: boolean }) => {
       window.__gizmoDragging = !!e.value
+      invalidate()
       if (!e.value) {
         clickGuard.until = performance.now() + 300
         snapWallItem(id)
@@ -215,6 +308,7 @@ function WallDistances({ item }: { item: PlacedItem }) {
 const ghostMat = new THREE.MeshStandardMaterial({ color: '#53c26b', transparent: true, opacity: 0.55, depthWrite: false, roughness: 0.6 })
 const GREEN = new THREE.Color('#53c26b')
 const RED = new THREE.Color('#ff4d4d')
+const _normal = new THREE.Vector3()
 
 function usePicker() {
   const { camera, scene, raycaster } = useThree()
@@ -244,7 +338,7 @@ function usePicker() {
           let nx = 0
           let nz = 0
           if (h.face) {
-            const n = h.face.normal.clone().transformDirection(h.object.matrixWorld)
+            const n = _normal.copy(h.face.normal).transformDirection(h.object.matrixWorld)
             if (Math.abs(n.y) < 0.5) {
               nx = n.x
               nz = n.z
@@ -302,25 +396,25 @@ function Ghost({ catalogId }: { catalogId: string }) {
   const e = getEntry(catalogId)
   const ref = useRef<THREE.Group>(null)
   const pick = usePicker()
+  const gl = useThree((st) => st.gl)
   const ndc = useMemo(() => new THREE.Vector2(), [])
   const blockedRef = useRef(false)
+  const entry = useFurnitureGeometry({ catalogId, w: e?.w ?? 1, d: e?.d ?? 1, h: e?.h ?? 1 }, false)
   useEffect(() => {
     ghostMat.color.copy(GREEN)
     usePlanner.getState().set({ ghostBlocked: false })
   }, [])
-
-  useLayoutEffect(() => {
-    ref.current?.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) {
-        const m = o as THREE.Mesh
-        m.material = ghostMat
-        m.castShadow = false
-        m.receiveShadow = false
-        m.raycast = () => {}
-        m.renderOrder = 5
-      }
-    })
-  })
+  // render-on-demand: the ghost follows the pointer, so pointer moves must produce a frame
+  useEffect(() => {
+    const el = gl.domElement
+    const onMove = () => invalidate()
+    el.addEventListener('pointermove', onMove)
+    invalidate()
+    return () => {
+      el.removeEventListener('pointermove', onMove)
+      invalidate()
+    }
+  }, [gl])
 
   useFrame((state) => {
     const g = ref.current
@@ -346,10 +440,11 @@ function Ghost({ catalogId }: { catalogId: string }) {
   if (!e) return null
   return (
     <group ref={ref} visible={false}>
-      <FurnitureModel catalogId={catalogId} w={e.w} d={e.d} h={e.h} />
+      <mesh geometry={entry.geometry} material={ghostMat} renderOrder={5} raycast={noRaycast} />
     </group>
   )
 }
+const noRaycast = () => {}
 
 // ------------------------------------------------------------------ input: tap to place / deselect, keyboard
 function useCanvasInput() {
@@ -465,6 +560,7 @@ export default function FurnitureLayer() {
   }, [])
 
   useCanvasInput()
+  useLodManager()
 
   const active = tool === 'furniture'
   const selected = active ? items.find((i) => i.id === selectedId) : undefined
@@ -473,7 +569,7 @@ export default function FurnitureLayer() {
   return (
     <group name="furniture-layer">
       {items.map((it) => (
-        <Item key={it.id} item={it} register={register} />
+        <Item key={it.id} item={it} selected={it.id === selectedId} register={register} />
       ))}
       {selected && target && !pending && <Gizmo key={selected.id} item={selected} object={target} />}
       {selected && <SelectionBox item={selected} />}
