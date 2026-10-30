@@ -2,7 +2,7 @@
 // Daylight interior lighting: sky, soft-shadowed sun fitted to the flat, interior IBL built from
 // Lightformers (no files), hemisphere fill, warm ceiling downlights per room, renderer setup.
 import { useEffect, useMemo } from 'react'
-import { useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { Environment, Lightformer, Sky } from '@react-three/drei'
 import * as THREE from 'three'
 import planC from '../data/planC'
@@ -11,6 +11,7 @@ import { toM } from '../data/schema'
 import { useStore } from '../store'
 import { applyQuality, getMaterials } from './materials'
 import Surroundings from './Surroundings'
+import { markShadowsDirty, shadowsDirty } from './shadows'
 
 /** Sun: azimuth measured from north (-z) toward east (+x), degrees; elevation above horizon. */
 const SUN_AZIMUTH = -28
@@ -95,14 +96,32 @@ export default function Lighting() {
     gl.outputColorSpace = THREE.SRGBColorSpace
     gl.shadowMap.enabled = true
     gl.shadowMap.type = THREE.PCFSoftShadowMap
+    // static sun + static building: render the shadow map only when something changes (see shadows.ts)
+    gl.shadowMap.autoUpdate = false
     // dev hook for perf checks: __gl.info.render / __gl.info.memory / __gl.info.programs
     if (import.meta.env.DEV) (window as unknown as { __gl: THREE.WebGLRenderer }).__gl = gl
   }, [gl])
 
   useEffect(() => {
     applyQuality(quality)
-    gl.shadowMap.needsUpdate = true
+    markShadowsDirty()
   }, [quality, gl])
+
+  // anything that changes what casts shadows: furniture, doors swinging, cut-away walls in plan view
+  useEffect(() => {
+    markShadowsDirty(3000) // first frames: geometry and furniture are still mounting
+    return useStore.subscribe((s, prev) => {
+      if (s.items !== prev.items || s.mode !== prev.mode || s.showCeilings !== prev.showCeilings) markShadowsDirty()
+      else if (s.doorsOpen !== prev.doorsOpen) markShadowsDirty(2000) // covers the door animation
+    })
+  }, [])
+
+  useFrame((state) => {
+    if (shadowsDirty()) {
+      gl.shadowMap.needsUpdate = true
+      state.invalidate() // keep rendering until the dirty window has passed
+    }
+  }, -1)
 
   // sun shadow camera fitted to the flat
   const sun = useMemo(() => {

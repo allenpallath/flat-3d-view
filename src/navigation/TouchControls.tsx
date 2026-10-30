@@ -1,6 +1,7 @@
 // OWNER: Navigation agent (A3). On-screen joystick (bottom-left) + look-pad (bottom-right) for touch devices.
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
+import { invalidate } from '@react-three/fiber'
 import { isTouchDevice, touchInput } from './input'
 
 const R = 46 // knob travel radius, px
@@ -50,6 +51,7 @@ function Joystick() {
         }
         setKnob({ x: dx, y: dy })
         touchInput.moveX = dx / R
+        invalidate()
         touchInput.moveY = -dy / R
       }}
       onPointerUp={end}
@@ -86,6 +88,7 @@ function LookPad() {
         const l = last.current
         if (!l || l.id !== e.pointerId) return
         touchInput.lookYaw -= (e.clientX - l.x) * LOOK_SENS
+        invalidate()
         touchInput.lookPitch -= (e.clientY - l.y) * LOOK_SENS
         l.x = e.clientX
         l.y = e.clientY

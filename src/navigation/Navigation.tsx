@@ -1,6 +1,6 @@
 // OWNER: Navigation agent (A3). Camera rigs for walk / dollhouse / plan modes. Rendered inside <Canvas>.
 import { useEffect, useMemo, useRef } from 'react'
-import { advance, useFrame, useThree } from '@react-three/fiber'
+import { advance, invalidate, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
@@ -19,6 +19,17 @@ const DRAG_SENS = 0.22 // deg per px
 const LOCK_SENS = 0.12
 const PITCH_LIMIT = 80
 const DEG = Math.PI / 180
+
+// Motion-adaptive resolution: while walking/looking the frame is rendered at a lower pixel ratio
+// (motion hides the softness, like a light blur); ~250 ms after motion stops one sharp frame follows.
+const BASE_DPR = typeof window === 'undefined' ? 1 : Math.min(window.devicePixelRatio || 1, 2)
+const MOTION_DPR = BASE_DPR >= 1.5 ? BASE_DPR * 0.6 : BASE_DPR * 0.8
+const SHARPEN_AFTER_MS = 250
+let lastMotion = 0
+const noteMotion = () => {
+  lastMotion = performance.now()
+  invalidate()
+}
 
 /** Walker state persists across mode switches (module level). */
 export const walkState = {
@@ -101,6 +112,7 @@ function WalkController({ active }: { active: boolean }) {
     } else {
       keys.current.clear()
       walkState.vx = walkState.vz = 0
+      getThree().setDpr(BASE_DPR)
       // walk-mode zoom shouldn't carry over to the dollhouse view
       if (camera instanceof THREE.PerspectiveCamera && camera.fov !== FOV_DEFAULT) {
         camera.fov = FOV_DEFAULT
@@ -145,6 +157,7 @@ function WalkController({ active }: { active: boolean }) {
       if (!activeRef.current) return
       if (e.code in MOVE_KEYS || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         keys.current.add(e.code)
+        noteMotion()
         if (e.code.startsWith('Arrow')) e.preventDefault()
       } else if (e.code === 'KeyE' && !e.repeat) {
         const id = nearestDoor(planC, walkState.x, walkState.z, 130)
@@ -185,6 +198,7 @@ function WalkController({ active }: { active: boolean }) {
     }
     const look = (dx: number, dy: number, sens: number) => {
       const k = sens * (useStore.getState().fov / FOV_DEFAULT) // slower look when zoomed in
+      noteMotion()
       walkState.yaw -= dx * k
       walkState.pitch = THREE.MathUtils.clamp(walkState.pitch - dy * k, -PITCH_LIMIT, PITCH_LIMIT)
     }
@@ -351,6 +365,14 @@ function WalkController({ active }: { active: boolean }) {
       camera.quaternion.copy(tmpQuat)
     }
 
+    // on-demand rendering: keep frames coming while anything is in motion
+    const zooming = camera instanceof THREE.PerspectiveCamera && camera.fov !== useStore.getState().fov
+    if (mag > 0 || w.vx !== 0 || w.vz !== 0 || tween.current || zooming) noteMotion()
+    const settling = performance.now() - lastMotion < SHARPEN_AFTER_MS
+    if (settling) state.invalidate() // one more sharp frame comes after motion stops
+    const dpr = settling ? MOTION_DPR : BASE_DPR
+    if (state.viewport.dpr !== dpr) state.setDpr(dpr)
+
     // throttled store write (~10 Hz), only on change
     const now = state.clock.elapsedTime
     if (now - lastWrite.current > 0.1) {
@@ -395,6 +417,7 @@ function DollhouseView() {
     const tw = tween.current
     if (!tw) return
     tw.t = Math.min(1, tw.t + dt / 1.0)
+    invalidate()
     camera.position.lerpVectors(tw.from, tw.to, easeInOut(tw.t))
     camera.lookAt(target)
     controls.current?.update()

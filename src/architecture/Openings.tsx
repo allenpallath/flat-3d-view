@@ -134,9 +134,10 @@ function HingedDoor({ w, o, cut }: { w: Wall; o: Opening; cut: number }) {
 
   const { open, k } = useOpenFactor(o.id)
   const group = useRef<THREE.Group>(null)
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     k.current = step(k.current, open ? 1 : 0, dt)
     if (group.current) group.current.rotation.y = thC + diff * k.current
+    if (k.current !== (open ? 1 : 0)) state.invalidate() // on-demand rendering: keep animating
   })
   const onClick = useToggle(o.id)
   const leaf = useBuilt((b) => buildLeaf(b, W, H, T, main, sz), cut, [W, H, T, main, sz])
@@ -197,8 +198,9 @@ function SlidingDoor({ w, o, cut }: { w: Wall; o: Opening; cut: number }) {
 
   const { open, k } = useOpenFactor(o.id)
   const ga = useRef<THREE.Group>(null)
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     k.current = step(k.current, open ? 1 : 0, dt, 2.5)
+    if (k.current !== (open ? 1 : 0)) state.invalidate() // on-demand rendering: keep animating
     if (ga.current) {
       const d = toM(travel * k.current)
       ga.current.position.set(fr.sDir.x * d, 0, fr.sDir.z * d)
