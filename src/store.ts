@@ -1,0 +1,110 @@
+import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import type { ElectricalPoint, PlacedItem, PointType, Quality, Tool, ViewMode } from './data/schema'
+
+let idCounter = 0
+export const newId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`
+
+export interface Teleport {
+  /** cm */
+  x: number
+  z: number
+  yawDeg?: number
+  /** bumps on every request so repeated teleports to the same spot still fire */
+  nonce: number
+}
+
+export interface AppState {
+  // view
+  mode: ViewMode
+  tool: Tool
+  quality: Quality
+  overlay: boolean // show the original floor-plan image on the floor
+  showCeilings: boolean
+  eyeHeight: number // cm
+  doorsOpen: Record<string, boolean> // opening id -> open
+  teleport: Teleport | null
+  /** current walker position (cm) + yaw, written by navigation for the minimap/HUD */
+  player: { x: number; z: number; yawDeg: number }
+
+  // planner
+  items: PlacedItem[]
+  points: ElectricalPoint[]
+  selectedId: string | null
+  /** catalog item or point type the user picked and is about to place */
+  pendingCatalogId: string | null
+  pendingPointType: PointType | null
+
+  // actions
+  set: (p: Partial<AppState>) => void
+  setMode: (m: ViewMode) => void
+  setTool: (t: Tool) => void
+  toggleDoor: (id: string) => void
+  requestTeleport: (x: number, z: number, yawDeg?: number) => void
+  addItem: (i: Omit<PlacedItem, 'id'>) => string
+  updateItem: (id: string, p: Partial<PlacedItem>) => void
+  removeItem: (id: string) => void
+  addPoint: (p: Omit<ElectricalPoint, 'id'>) => string
+  updatePoint: (id: string, p: Partial<ElectricalPoint>) => void
+  removePoint: (id: string) => void
+  replaceAll: (data: { items?: PlacedItem[]; points?: ElectricalPoint[] }) => void
+}
+
+export const useStore = create<AppState>()(
+  persist(
+    (set) => ({
+      mode: 'walk',
+      tool: 'none',
+      quality: 'high',
+      overlay: false,
+      showCeilings: true,
+      eyeHeight: 160,
+      doorsOpen: {},
+      teleport: null,
+      player: { x: 0, z: 0, yawDeg: 0 },
+
+      items: [],
+      points: [],
+      selectedId: null,
+      pendingCatalogId: null,
+      pendingPointType: null,
+
+      set: (p) => set(p),
+      setMode: (mode) => set({ mode }),
+      setTool: (tool) => set({ tool, pendingCatalogId: null, pendingPointType: null }),
+      toggleDoor: (id) => set((s) => ({ doorsOpen: { ...s.doorsOpen, [id]: !(s.doorsOpen[id] ?? true) } })),
+      requestTeleport: (x, z, yawDeg) => set((s) => ({ teleport: { x, z, yawDeg, nonce: (s.teleport?.nonce ?? 0) + 1 } })),
+
+      addItem: (i) => {
+        const id = newId('item')
+        set((s) => ({ items: [...s.items, { ...i, id }], selectedId: id }))
+        return id
+      },
+      updateItem: (id, p) => set((s) => ({ items: s.items.map((it) => (it.id === id ? { ...it, ...p } : it)) })),
+      removeItem: (id) => set((s) => ({ items: s.items.filter((it) => it.id !== id), selectedId: s.selectedId === id ? null : s.selectedId })),
+
+      addPoint: (p) => {
+        const id = newId('pt')
+        set((s) => ({ points: [...s.points, { ...p, id }], selectedId: id }))
+        return id
+      },
+      updatePoint: (id, p) => set((s) => ({ points: s.points.map((it) => (it.id === id ? { ...it, ...p } : it)) })),
+      removePoint: (id) => set((s) => ({ points: s.points.filter((it) => it.id !== id), selectedId: s.selectedId === id ? null : s.selectedId })),
+      replaceAll: (data) => set((s) => ({ items: data.items ?? s.items, points: data.points ?? s.points, selectedId: null })),
+    }),
+    {
+      name: 'flat-c-planner-v1',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (s) => ({
+        items: s.items,
+        points: s.points,
+        quality: s.quality,
+        eyeHeight: s.eyeHeight,
+        doorsOpen: s.doorsOpen,
+      }),
+    },
+  ),
+)
+
+/** Doors are open unless explicitly closed. */
+export const isDoorOpen = (doorsOpen: Record<string, boolean>, id: string) => doorsOpen[id] ?? true
