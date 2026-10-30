@@ -68,7 +68,7 @@ export function suggestedPoints(plan: Plan): NewPoint[] {
   wall('kitchen', 'W', 675, 110, 'socket16A', 'Hob: induction / auto-ignition')
   wall('kitchen', 'W', 700, 220, 'socket6A', 'Chimney (hidden by duct cover)')
   wall('kitchen', 'W', 645, 110, 'socket6A', 'Counter socket')
-  wall('kitchen', 'W', 860, 110, 'socket6A', 'Counter socket: mixer')
+  wall('kitchen', 'W', 885, 110, 'socket6A', 'Counter socket: mixer')
   wall('kitchen', 'S', 75, 110, 'socket6A', 'Counter socket: RO / kettle')
   wall('kitchen', 'S', 160, 110, 'socket6A', 'Counter socket: toaster')
   wall('kitchen', 'S', 275, 110, 'socket16A', 'Microwave / OTG')
