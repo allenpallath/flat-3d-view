@@ -72,14 +72,12 @@ export const planC: Plan = {
     { id: 'bal2N', kind: 'parapet', height: 110, rect: { x1: 785, z1: 146, x2: 905, z2: 158 } },
     { id: 'bal2Rail', kind: 'railing', height: 110, rect: { x1: 899, z1: 158, x2: 905, z2: 326 } },
 
-    { id: 't1N', kind: 'interior', height: H, rect: { x1: 643, z1: 326, x2: 910, z2: 338 } },
     {
-      id: 'toiletW', kind: 'interior', height: H, rect: { x1: 643, z1: 338, x2: 655, z2: 614 },
-      openings: [
-        { id: 't1Door', kind: 'door', from: 350, to: 425, sill: 0, head: DOOR_HEAD, hinge: 'from', swing: 1 },
-        { id: 't2Door', kind: 'door', from: 530, to: 605, sill: 0, head: DOOR_HEAD, hinge: 'to', swing: 1 },
-      ],
+      id: 't1N', kind: 'interior', height: H, rect: { x1: 643, z1: 326, x2: 910, z2: 338 },
+      // toilet doors open off the dress areas, as on the drawing
+      openings: [{ id: 't1Door', kind: 'door', from: 665, to: 740, sill: 0, head: DOOR_HEAD, hinge: 'from', swing: 1 }],
     },
+    { id: 'toiletW', kind: 'interior', height: H, rect: { x1: 643, z1: 338, x2: 655, z2: 614 } },
     { id: 'midWall', kind: 'interior', height: H, rect: { x1: 343, z1: 470, x2: 643, z2: 482 } },
     { id: 'toiletMid', kind: 'interior', height: H, rect: { x1: 655, z1: 470, x2: 910, z2: 482 } },
     {
@@ -89,7 +87,10 @@ export const planC: Plan = {
         { id: 't2Vent', kind: 'ventilator', from: 520, to: 580, sill: 180, head: 225 },
       ],
     },
-    { id: 't2S', kind: 'interior', height: H, rect: { x1: 643, z1: 614, x2: 910, z2: 626 } },
+    {
+      id: 't2S', kind: 'interior', height: H, rect: { x1: 643, z1: 614, x2: 910, z2: 626 },
+      openings: [{ id: 't2Door', kind: 'door', from: 665, to: 740, sill: 0, head: DOOR_HEAD, hinge: 'from', swing: -1 }],
+    },
     {
       id: 'dress2Glass', kind: 'glass', height: H, rect: { x1: 773, z1: 626, x2: 785, z2: 782 },
       openings: [{ id: 'bal3Slide', kind: 'sliding', from: 636, to: 772, sill: 0, head: DOOR_HEAD }],

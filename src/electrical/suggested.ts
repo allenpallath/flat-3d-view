@@ -96,7 +96,7 @@ export function suggestedPoints(plan: Plan): NewPoint[] {
   ceil('master', 'fanPoint', 'Bedroom fan')
   ceil('master', 'lightPoint', 'Bedroom light', 493, 410)
   ceil('dress1', 'lightPoint', 'Dress light')
-  wall('master', 'E', 440, 120, 'switchboard', 'Toilet switches (outside toilet door)')
+  wall('dress1', 'S', 755, 120, 'switchboard', 'Toilet switches (outside toilet door)')
 
   // ---------------- Toilet (master) ----------------
   wall('toilet1', 'N', 860, 200, 'socket16A', 'Geyser (above shower)')
@@ -113,7 +113,7 @@ export function suggestedPoints(plan: Plan): NewPoint[] {
   ceil('bedroom', 'fanPoint', 'Bedroom fan')
   ceil('bedroom', 'lightPoint', 'Bedroom light', 493, 720)
   ceil('dress2', 'lightPoint', 'Dress light')
-  wall('bedroom', 'E', 515, 120, 'switchboard', 'Toilet switches (outside toilet door)')
+  wall('dress2', 'N', 755, 120, 'switchboard', 'Toilet switches (outside toilet door)')
 
   // ---------------- Toilet (bedroom 2) ----------------
   wall('toilet2', 'S', 860, 200, 'socket16A', 'Geyser (above shower)')

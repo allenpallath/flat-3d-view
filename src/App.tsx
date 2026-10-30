@@ -1,6 +1,6 @@
 // OWNER: Manager. Wires the modules together; each module owns its own folder.
-import { Suspense } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Suspense, useEffect } from 'react'
+import { Canvas, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Architecture from './architecture/Architecture'
 import Lighting from './materials/Lighting'
@@ -15,6 +15,15 @@ import Toolbar from './ui/Toolbar'
 import HUD from './ui/HUD'
 import MeasureTool from './ui/MeasureTool'
 import PlanOverlay from './ui/PlanOverlay'
+
+/** Dev/test hook: exposes the scene so scripts can inspect it. */
+function SceneHook() {
+  const scene = useThree((s) => s.scene)
+  useEffect(() => {
+    ;(window as any).__scene = scene
+  }, [scene])
+  return null
+}
 
 export default function App() {
   return (
@@ -36,6 +45,7 @@ export default function App() {
           <PostFX />
         </Suspense>
         <Navigation />
+        <SceneHook />
       </Canvas>
       <Toolbar />
       <HUD />

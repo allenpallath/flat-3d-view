@@ -56,8 +56,9 @@ function DoorFrame({ w, o, fr, F, cut }: { w: Wall; o: Opening; fr: Frame; F: nu
         [fr.t0 - 1.6, fr.t0],
         [fr.t1, fr.t1 + 1.6],
       ]) {
-        b.b(fr.box(o.from - A, o.from, 0, o.head + A, a, c), m.darkWood)
-        b.b(fr.box(o.to, o.to + A, 0, o.head + A, a, c), m.darkWood)
+        // overlap the jamb by 3 mm so the trim's inner face never coincides with tile/skirting end faces
+        b.b(fr.box(o.from - A, o.from + 0.3, 0, o.head + A, a, c), m.darkWood)
+        b.b(fr.box(o.to - 0.3, o.to + A, 0, o.head + A, a, c), m.darkWood)
         b.b(fr.box(o.from, o.to, o.head, o.head + A, a, c), m.darkWood)
       }
     },
@@ -252,7 +253,7 @@ function Window({ w, o, cut }: { w: Wall; o: Opening; cut: number }) {
         sash(o.from + F, tc - 1.6)
         sash(o.to - F - SW, tc + 1.6)
         // marble sill, proud of both faces
-        if (o.sill > 0) b.b(fr.box(o.from - 3, o.to + 3, o.sill - 2.5, o.sill, fr.t0 - 3, fr.t1 + 3), m.stoneTop)
+        if (o.sill > 0) b.b(fr.box(o.from - 3, o.to + 3, o.sill - 2, o.sill + 0.5, fr.t0 - 3, fr.t1 + 3), m.stoneTop)
       } else {
         // ventilator: aluminium frame, frosted louvres
         const F = 3

@@ -302,7 +302,19 @@ function DollhouseView() {
     const dist = Math.max(SPAN.x, SPAN.z) * 1.15
     const to = new THREE.Vector3(CENTER.x - dist * 0.25, dist * 0.95, CENTER.z + dist * 0.75)
     tween.current = { t: 0, from: camera.position.clone(), to }
-    if (camera instanceof THREE.PerspectiveCamera) camera.updateProjectionMatrix()
+    // Viewing from 3–30 m away: a larger near plane gives far better depth precision (no z-fighting).
+    const persp = camera instanceof THREE.PerspectiveCamera ? camera : null
+    const prevNear = persp?.near
+    if (persp) {
+      persp.near = 0.5
+      persp.updateProjectionMatrix()
+    }
+    return () => {
+      if (persp && prevNear !== undefined) {
+        persp.near = prevNear
+        persp.updateProjectionMatrix()
+      }
+    }
   }, [camera])
 
   useFrame((_, dt) => {

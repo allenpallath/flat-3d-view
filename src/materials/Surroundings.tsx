@@ -146,8 +146,9 @@ export default function Surroundings() {
       cz,
       ground: metrePlane(400, 400),
       apron: metrePlane(x2 - x1 + apron * 2, z2 - z1 + apron * 2),
-      plinth: metreBox(x2 - x1, -GROUND_Y - 0.004, z2 - z1),
-      plinthPos: [cx, (GROUND_Y - 0.004) / 2, cz] as [number, number, number],
+      // a little wider and lower than the architecture's base slab so their faces never coincide (z-fighting)
+      plinth: metreBox(x2 - x1 + 0.12, -GROUND_Y - 0.008, z2 - z1 + 0.12),
+      plinthPos: [cx, (GROUND_Y - 0.008) / 2, cz] as [number, number, number],
       blocks: blocks.map((k) => ({ ...k, geo: metreBox(k.w, k.h, k.d) })),
       facade: facadeMaterial(),
     }

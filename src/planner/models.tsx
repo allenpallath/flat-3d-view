@@ -54,9 +54,14 @@ const shade = (color: string) =>
 
 // ---------------------------------------------------------------- primitives
 /** Box with p = [centre x, BOTTOM y, centre z], s = [w, h, d]. Rounded when r > 0. */
+// Every box is shrunk by 0.1 % of its own size about its centre. Parts that share a face
+// plane (a top board on a cabinet body, a front on a carcass) then sit a fraction of a mm
+// apart, with the smaller part in front, instead of z-fighting (flickering) while moving.
+const INSET = 0.999
+
 function Bx({ p, s, m, r = 0, rot }: { p: V3; s: V3; m: Mat; r?: number; rot?: V3 }) {
-  const [w, h, d] = s
-  const pos: V3 = [p[0], p[1] + h / 2, p[2]]
+  const [w, h, d] = s.map((v) => v * INSET) as V3
+  const pos: V3 = [p[0], p[1] + s[1] / 2, p[2]]
   const rr = Math.min(r, Math.min(w, h, d) / 2 - 0.01)
   if (rr > 0.2)
     return <RoundedBox args={[w, h, d]} radius={rr} smoothness={3} position={pos} rotation={rot} material={m} />
@@ -277,7 +282,7 @@ function Tv({ w, d, h, main }: MP) {
     <>
       <Bx p={[0, h * 0.15, -d / 2 + backD / 2]} s={[w * 0.7, h * 0.7, backD]} m={main} r={1.5} />
       <Bx p={[0, 0, d / 2 - 1.0]} s={[w, h, 1.6]} m={main} r={0.5} />
-      <mesh position={[0, h / 2, d / 2 - 0.15]} material={L.screen()}>
+      <mesh position={[0, h / 2, d / 2 + 0.05]} material={L.screen()}>
         <planeGeometry args={[w - 1.8, h - 1.8]} />
       </mesh>
     </>
