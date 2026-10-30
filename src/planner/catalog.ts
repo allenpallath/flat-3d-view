@@ -1,7 +1,9 @@
-// OWNER: Furniture Planner agent (A4).
 // Furniture catalog with real Indian-market sizes (cm). w = width (local x), d = depth (local z,
 // front of the item faces local +z), h = height. Origin of every model = footprint centre at its bottom.
+// Used by the planner (models, placement, panel) and by navigation (furniture colliders).
+// Note: tests/e2e/memory.mjs scans this file for `id: '...'` literals, so keep entries written out.
 import type { CatalogItem, PlacedItem } from '../data/schema'
+import { TV_CENTRE_CM, TV_SIZES, tvPanelCm } from '../data/tv'
 
 export type ModelKind =
   | 'sofa'
@@ -44,16 +46,13 @@ export interface CatalogEntry extends CatalogItem {
   inches?: number
 }
 
-/** 16:9 panel size (cm) for a diagonal in inches, incl. a ~1 cm bezel. */
-export function tvSize(inches: number) {
-  const diag = inches * 2.54
-  const k = Math.sqrt(16 * 16 + 9 * 9)
-  return { w: Math.round((diag * 16) / k + 2), h: Math.round((diag * 9) / k + 2) }
-}
+export { TV_SIZES }
 
-export const TV_SIZES = [43, 50, 55, 65, 75] as const
-/** centre height of a wall TV above floor, cm */
-export const TV_CENTRE = 110
+/** 16:9 panel size (cm, rounded) for a diagonal in inches, incl. a ~1 cm bezel. */
+export function tvSize(inches: number) {
+  const p = tvPanelCm(inches)
+  return { w: Math.round(p.w), h: Math.round(p.h) }
+}
 
 const tvs: CatalogEntry[] = TV_SIZES.map((inches) => {
   const { w, h } = tvSize(inches)
@@ -66,7 +65,7 @@ const tvs: CatalogEntry[] = TV_SIZES.map((inches) => {
     w,
     d: 6,
     h,
-    y: Math.round(TV_CENTRE - h / 2),
+    y: Math.round(TV_CENTRE_CM - h / 2),
     color: '#111214',
     wallMounted: true,
   }
@@ -137,6 +136,7 @@ export const CATALOG: CatalogEntry[] = [
 
 const byId = new Map(CATALOG.map((c) => [c.id, c]))
 
+/** Catalog entry by id (shared CatalogItem fields only). */
 export function getCatalogItem(id: string): CatalogItem | undefined {
   return byId.get(id)
 }
@@ -146,6 +146,7 @@ export function getEntry(id: string): CatalogEntry | undefined {
   return byId.get(id)
 }
 
+/** Display names of the catalog categories, in panel order. */
 export const CATEGORY_LABELS: Record<CatalogItem['category'], string> = {
   living: 'Living',
   dining: 'Dining',

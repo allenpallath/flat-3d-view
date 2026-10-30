@@ -1,10 +1,15 @@
-// Shared contracts. ALL plan coordinates are in centimetres.
+// Shared types for every module: the building plan, placed furniture, electrical points, view state.
+// ALL plan coordinates are in centimetres.
 // Origin = top-left (north-west) interior corner of the Hall.
 // +x = east (right on the drawing), +z = south (down on the drawing), y = up.
-// Scene units are METRES: use cm() / toM() when converting.
+// Scene units are METRES: convert with toM() (cm -> m) and toCm() (m -> cm).
 
+/** Metres per centimetre. */
 export const CM = 0.01
+/** Plan centimetres -> scene metres. */
 export const toM = (cm: number) => cm * CM
+/** Scene metres -> plan centimetres. */
+export const toCm = (m: number) => m * 100
 
 export interface Rect {
   x1: number
@@ -90,7 +95,7 @@ export interface Plan {
   spawn: { x: number; z: number; yawDeg: number }
 }
 
-/** Box in cm, used for wall pieces and colliders. */
+/** Axis-aligned box in cm (min/max corners as [x, y, z]), used for wall pieces and colliders. */
 export interface Box {
   min: [number, number, number]
   max: [number, number, number]

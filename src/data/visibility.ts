@@ -1,7 +1,7 @@
 // Room-to-room visibility for culling: which rooms can see each other through doorways,
 // open boundaries (open kitchen, dress areas) or windows. Pure functions, unit-tested.
 import type { Box, Plan, Rect } from './schema'
-import { fixtureBox, roomAt, wallAxis, wallBoxes } from './geometry'
+import { DOOR_KINDS, fixtureBox, openingRect, roomAt, wallBoxes } from './geometry'
 
 export interface RoomLink {
   a: string
@@ -10,16 +10,21 @@ export interface RoomLink {
   doors: string[]
 }
 
-const DOOR_KINDS = new Set(['door', 'mainDoor', 'sliding'])
 /** Heights (cm) at which a gap must be clear to see through: door height and eye height. */
 const SAMPLE_Y = [100, 150]
 const MAX_GAP = 30 // cm: rooms further apart than a thick wall are not neighbours
 const MIN_SHARED = 20 // cm of shared boundary needed
 
+/** Strictly inside a box (0.5 cm margin on x/z so a sample on a shared face counts as clear). */
 const inside = (b: Box, x: number, y: number, z: number) =>
   x > b.min[0] + 0.5 && x < b.max[0] - 0.5 && y > b.min[1] && y < b.max[1] && z > b.min[2] + 0.5 && z < b.max[2] - 0.5
 
-/** Every pair of rooms that can see each other, and which doors (if any) that depends on. */
+/**
+ * Every pair of rooms that can see each other, and which doors (if any) that depends on.
+ * For each pair of rooms that face each other across at most one wall, sample the strip between
+ * them every 5 cm. A sample is a gap if no wall piece / fixture covers it at door or eye height;
+ * gaps inside a door opening make the link depend on that door, any other gap makes it always open.
+ */
 export function roomLinks(plan: Plan): RoomLink[] {
   // glass walls and railings don't block the view
   const solid = plan.walls.filter((w) => w.kind !== 'glass' && w.kind !== 'railing')
@@ -27,10 +32,7 @@ export function roomLinks(plan: Plan): RoomLink[] {
   const doorRects: { id: string; r: Rect }[] = plan.walls.flatMap((w) =>
     (w.openings ?? [])
       .filter((o) => DOOR_KINDS.has(o.kind))
-      .map((o) => ({
-        id: o.id,
-        r: wallAxis(w) === 'x' ? { x1: o.from, z1: w.rect.z1, x2: o.to, z2: w.rect.z2 } : { x1: w.rect.x1, z1: o.from, x2: w.rect.x2, z2: o.to },
-      })),
+      .map((o) => ({ id: o.id, r: openingRect(w, o) })),
   )
   const links: RoomLink[] = []
   const rooms = plan.rooms
@@ -42,6 +44,7 @@ export function roomLinks(plan: Plan): RoomLink[] {
       const gapZ = Math.max(A.z1, B.z1) - Math.min(A.z2, B.z2)
       const sharedZ = Math.min(A.z2, B.z2) - Math.max(A.z1, B.z1)
       const sharedX = Math.min(A.x2, B.x2) - Math.max(A.x1, B.x1)
+      // side by side (east/west neighbours) or one above the other (north/south); sample the midline of the gap
       const samples: { x: number; z: number }[] = []
       if (gapX >= -1 && gapX <= MAX_GAP && sharedZ >= MIN_SHARED) {
         const x = A.x2 <= B.x1 + 1 ? (A.x2 + B.x1) / 2 : (B.x2 + A.x1) / 2

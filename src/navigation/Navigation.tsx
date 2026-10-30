@@ -1,4 +1,9 @@
-// OWNER: Navigation agent (A3). Camera rigs for walk / dollhouse / plan modes. Rendered inside <Canvas>.
+// Camera rigs for the three view modes, rendered inside <Canvas>:
+//   walk      – first person: keyboard / touch movement with collision, drag or pointer-lock look,
+//               wheel / pinch zoom (field of view), teleports from the minimap and panels;
+//   dollhouse – OrbitControls around the flat from above (ceilings are hidden by Ceilings.tsx);
+//   plan      – orthographic top-down camera, pan + zoom only.
+// The walker lives in plan cm (walkState); the camera is placed from it every frame in metres.
 import { useEffect, useMemo, useRef } from 'react'
 import { advance, invalidate, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, OrthographicCamera } from '@react-three/drei'
@@ -6,18 +11,24 @@ import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { planC } from '../data/planC'
 import { planBounds, roomAt } from '../data/geometry'
+import { toM } from '../data/schema'
 import type { Teleport } from '../store'
 import { FOV_DEFAULT, useStore } from '../store'
-import { buildColliders, findFreeSpot, moveCircle, nearestDoor, PLAYER_RADIUS } from './collision'
-import { catalogSize } from './catalogLookup'
-import { isLookBlocked, isTypingTarget, touchInput } from './input'
+import { getCatalogItem } from '../planner/catalog'
+import { buildColliders, findFreeSpot, moveCircle, nearestDoor, PLAYER_RADIUS, type SizeLookup } from './collision'
+import { isTypingTarget, touchInput } from './input'
 
 const WALK_SPEED = 140 // cm/s
-const RUN_SPEED = 280
+const RUN_SPEED = 280 // cm/s
 const ACCEL = 10 // 1/s, exponential approach to target velocity
 const DRAG_SENS = 0.22 // deg per px
-const LOCK_SENS = 0.12
-const PITCH_LIMIT = 80
+const LOCK_SENS = 0.12 // deg per px of pointer-lock movement
+const PITCH_LIMIT = 80 // deg up / down
+const START_PITCH = -5 // deg, slightly down so the floor is in view
+const DOOR_REACH = 130 // cm: E toggles the nearest door within this distance
+const KEY_ZOOM_STEP = 5 // deg of field of view per −/+ key press
+const ENTER_TWEEN_S = 0.8 // seconds of the camera glide into walk mode
+const FOV_EASE = 14 // 1/s, exponential approach of the camera fov to the chosen zoom
 const DEG = Math.PI / 180
 
 // Motion-adaptive resolution: while walking/looking the frame is rendered at a lower pixel ratio
@@ -31,12 +42,12 @@ const noteMotion = () => {
   invalidate()
 }
 
-/** Walker state persists across mode switches (module level). */
-export const walkState = {
+/** Walker state (cm, cm/s, degrees). Module level so it persists across mode switches. */
+const walkState = {
   x: planC.spawn.x,
   z: planC.spawn.z,
   yaw: planC.spawn.yawDeg,
-  pitch: -5,
+  pitch: START_PITCH,
   vx: 0,
   vz: 0,
 }
@@ -45,20 +56,28 @@ export const walkState = {
 let appliedNonce = 0
 
 const B = planBounds(planC)
-const CENTER = { x: (B.x1 + B.x2) / 200, z: (B.z1 + B.z2) / 200 } // metres
-const SPAN = { x: (B.x2 - B.x1) / 100, z: (B.z2 - B.z1) / 100 }
+const CENTER = { x: toM((B.x1 + B.x2) / 2), z: toM((B.z1 + B.z2) / 2) } // metres
+const SPAN = { x: toM(B.x2 - B.x1), z: toM(B.z2 - B.z1) } // metres
 
 /** set by the furniture planner (A4) while a transform gizmo is being dragged */
 const gizmoDragging = () => !!(window as unknown as { __gizmoDragging?: boolean }).__gizmoDragging
 
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 
+/** Furniture sizes for the walker's colliders, from the planner catalog. */
+const catalogSize: SizeLookup = (id) => {
+  const c = getCatalogItem(id)
+  return c ? { w: c.w, d: c.d, h: c.h, y: c.y } : undefined
+}
+
+/** Collision rects (cm) for the current doors and furniture; rebuilt only when those change. */
 function useColliders() {
   const doorsOpen = useStore((s) => s.doorsOpen)
   const items = useStore((s) => s.items)
   return useMemo(() => buildColliders(planC, doorsOpen, items, catalogSize), [doorsOpen, items])
 }
 
+/** Key code -> [strafe right, forward] input. */
 const MOVE_KEYS: Record<string, [number, number]> = {
   KeyW: [0, 1],
   ArrowUp: [0, 1],
@@ -70,6 +89,10 @@ const MOVE_KEYS: Record<string, [number, number]> = {
   ArrowRight: [1, 0],
 }
 
+/**
+ * First-person controller. Always mounted (so keyboard state and teleports are handled in every mode),
+ * but only moves the camera while `active` (walk mode).
+ */
 function WalkController({ active }: { active: boolean }) {
   const camera = useThree((s) => s.camera)
   const gl = useThree((s) => s.gl)
@@ -87,7 +110,7 @@ function WalkController({ active }: { active: boolean }) {
   /** Put the camera exactly at the walker's eye (no tween). */
   const snapCamera = () => {
     const cam = getThree().camera
-    cam.position.set(walkState.x / 100, useStore.getState().eyeHeight / 100, walkState.z / 100)
+    cam.position.set(toM(walkState.x), toM(useStore.getState().eyeHeight), toM(walkState.z))
     cam.quaternion.setFromEuler(new THREE.Euler(walkState.pitch * DEG, walkState.yaw * DEG, 0, 'YXZ'))
     cam.updateMatrixWorld()
   }
@@ -134,7 +157,7 @@ function WalkController({ active }: { active: boolean }) {
       walkState.z = p.z
       walkState.vx = walkState.vz = 0
       if (t.yawDeg != null) walkState.yaw = t.yawDeg
-      walkState.pitch = -5
+      walkState.pitch = START_PITCH
       lastTeleport.current = performance.now()
       tween.current = null
       if (s.mode === 'walk') {
@@ -160,12 +183,12 @@ function WalkController({ active }: { active: boolean }) {
         noteMotion()
         if (e.code.startsWith('Arrow')) e.preventDefault()
       } else if (e.code === 'KeyE' && !e.repeat) {
-        const id = nearestDoor(planC, walkState.x, walkState.z, 130)
+        const id = nearestDoor(planC, walkState.x, walkState.z, DOOR_REACH)
         if (id) useStore.getState().toggleDoor(id)
       } else if (e.code === 'Minus' || e.code === 'NumpadSubtract') {
-        useStore.getState().zoomBy(5) // zoom out = wider view
+        useStore.getState().zoomBy(KEY_ZOOM_STEP) // zoom out = wider view
       } else if (e.code === 'Equal' || e.code === 'NumpadAdd') {
-        useStore.getState().zoomBy(-5)
+        useStore.getState().zoomBy(-KEY_ZOOM_STEP)
       } else if (e.code === 'Digit0' && !e.repeat) {
         useStore.getState().setFov(FOV_DEFAULT)
       } else if (e.code === 'KeyL' && !e.repeat) {
@@ -212,7 +235,7 @@ function WalkController({ active }: { active: boolean }) {
           return
         }
       }
-      if (e.button !== 0 || isLookBlocked() || gizmoDragging() || document.pointerLockElement === el) return
+      if (e.button !== 0 || gizmoDragging() || document.pointerLockElement === el) return
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY }
     }
     const onWheel = (e: WheelEvent) => {
@@ -240,7 +263,7 @@ function WalkController({ active }: { active: boolean }) {
         return
       }
       if (!drag || e.pointerId !== drag.id) return
-      if (isLookBlocked() || gizmoDragging()) {
+      if (gizmoDragging()) {
         drag = null
         return
       }
@@ -303,6 +326,8 @@ function WalkController({ active }: { active: boolean }) {
     }
     const running = keys.current.has('ShiftLeft') || keys.current.has('ShiftRight') || Math.hypot(touchInput.moveX, touchInput.moveY) > 0.95
     const speed = running ? RUN_SPEED : WALK_SPEED
+    // yaw 0 looks north (-z) and positive yaw turns left (CCW from above), as three.js rotation.y:
+    // forward = (-sin yaw, -cos yaw), right = (cos yaw, -sin yaw) on the x/z plane
     const yr = w.yaw * DEG
     const fx = -Math.sin(yr)
     const fz = -Math.cos(yr)
@@ -325,7 +350,7 @@ function WalkController({ active }: { active: boolean }) {
     w.z = p.z
 
     const eye = useStore.getState().eyeHeight
-    tmpPos.set(w.x / 100, eye / 100, w.z / 100)
+    tmpPos.set(toM(w.x), toM(eye), toM(w.z))
     tmpEuler.set(w.pitch * DEG, w.yaw * DEG, 0, 'YXZ')
     tmpQuat.setFromEuler(tmpEuler)
 
@@ -335,7 +360,7 @@ function WalkController({ active }: { active: boolean }) {
       const diff = target - camera.fov
       let dirty = false
       if (Math.abs(diff) > 0.05) {
-        camera.fov += diff * (1 - Math.exp(-14 * rawDt))
+        camera.fov += diff * (1 - Math.exp(-FOV_EASE * rawDt))
         dirty = true
       } else if (diff !== 0) {
         camera.fov = target
@@ -343,9 +368,10 @@ function WalkController({ active }: { active: boolean }) {
       }
       // Near plane as far out as possible (depth precision, less shimmer) while its corners stay
       // inside the walker's collision radius, so hugging a wall never clips through it.
+      // A near-plane corner is at distance near * reach from the eye; keep that within 90 % of the radius.
       const tanH = Math.tan((camera.fov * DEG) / 2)
       const reach = Math.sqrt(1 + tanH * tanH * (1 + camera.aspect * camera.aspect))
-      const near = Math.min(0.1, (PLAYER_RADIUS * 0.009) / reach)
+      const near = Math.min(0.1, (toM(PLAYER_RADIUS) * 0.9) / reach)
       if (Math.abs(camera.near - near) > 1e-4) {
         camera.near = near
         dirty = true
@@ -355,7 +381,7 @@ function WalkController({ active }: { active: boolean }) {
 
     const tw = tween.current
     if (tw) {
-      tw.t = Math.min(1, tw.t + rawDt / 0.8) // wall-clock: finishes on time even at low fps
+      tw.t = Math.min(1, tw.t + rawDt / ENTER_TWEEN_S) // wall-clock: finishes on time even at low fps
       const e = easeInOut(tw.t)
       camera.position.lerpVectors(tw.pos, tmpPos, e)
       camera.quaternion.slerpQuaternions(tw.quat, tmpQuat, e)
@@ -373,7 +399,7 @@ function WalkController({ active }: { active: boolean }) {
     const dpr = settling ? MOTION_DPR : BASE_DPR
     if (state.viewport.dpr !== dpr) state.setDpr(dpr)
 
-    // throttled store write (~10 Hz), only on change
+    // throttled store write (~10 Hz), only on change; yaw is reported wrapped to [-180, 180)
     const now = state.clock.elapsedTime
     if (now - lastWrite.current > 0.1) {
       lastWrite.current = now
@@ -388,6 +414,7 @@ function WalkController({ active }: { active: boolean }) {
   return null
 }
 
+/** Orbit view of the whole flat; glides the camera to a 3/4 overview on entry. */
 function DollhouseView() {
   const camera = useThree((s) => s.camera)
   const controls = useRef<OrbitControlsImpl>(null)
@@ -439,6 +466,7 @@ function DollhouseView() {
   )
 }
 
+/** Top-down orthographic view, zoomed to fit the flat; left-drag pans, wheel / pinch zooms. */
 function PlanView() {
   const size = useThree((s) => s.size)
   const zoom = Math.min(size.width / (SPAN.x + 1), size.height / (SPAN.z + 1.5)) * 0.92
@@ -461,6 +489,7 @@ function PlanView() {
   )
 }
 
+/** All camera rigs; the store's `mode` decides which one drives the camera. */
 export default function Navigation() {
   const mode = useStore((s) => s.mode)
   return (

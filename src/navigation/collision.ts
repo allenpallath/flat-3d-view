@@ -1,18 +1,17 @@
-// OWNER: Navigation agent (A3). Pure collision helpers (cm), no three.js / React.
+// Pure 2D collision for the walker (cm, no three.js / React): the walker is a circle on the floor
+// plan, every obstacle (wall piece, fixture, closed door, furniture footprint) an axis-aligned rect.
+// Also finds free spots for teleports and the nearest door for the E key. Unit-tested.
 import type { Plan, PlacedItem, Rect, Wall, Opening } from '../data/schema'
-import { staticColliders, wallAxis } from '../data/geometry'
+import { DOOR_KINDS, openingRect, staticColliders } from '../data/geometry'
 
+/** Walker radius, cm. */
 export const PLAYER_RADIUS = 20
 /** items lower than this (rugs, mats) don't block walking */
 export const MIN_BLOCKING_HEIGHT = 30
-export const DOOR_KINDS = new Set<Opening['kind']>(['door', 'mainDoor', 'sliding'])
-
-/** Rect covering an opening across the full wall thickness. */
-export function openingRect(w: Wall, o: Opening): Rect {
-  return wallAxis(w) === 'x'
-    ? { x1: o.from, z1: w.rect.z1, x2: o.to, z2: w.rect.z2 }
-    : { x1: w.rect.x1, z1: o.from, x2: w.rect.x2, z2: o.to }
-}
+/** Items whose bottom is at or above this (cm, e.g. wall-mounted AC) are above the walker's body. */
+const OVERHEAD_CM = 150
+/** Items whose top is at or below this (cm) are stepped over. */
+const STEP_OVER_CM = 20
 
 /** All door-like openings of the plan with their wall. */
 export function doorOpenings(plan: Plan): { wall: Wall; opening: Opening; rect: Rect; cx: number; cz: number }[] {
@@ -36,6 +35,7 @@ export function rotatedFootprint(x: number, z: number, w: number, d: number, rot
   return { x1: x - hw, z1: z - hd, x2: x + hw, z2: z + hd }
 }
 
+/** Catalog size lookup (cm) for a catalog id; injected so this module stays independent of the planner. */
 export type SizeLookup = (catalogId: string) => { w: number; d: number; h: number; y?: number } | undefined
 
 /** Footprints of furniture that blocks walking. Items with unknown size are skipped. */
@@ -50,8 +50,8 @@ export function itemColliders(items: PlacedItem[], lookup?: SizeLookup): Rect[] 
     if (h != null && h < MIN_BLOCKING_HEIGHT) continue
     const y = it.y ?? 0
     // wall-mounted things above head-ish / below knee don't block (e.g. TV at 100 cm still blocks)
-    if (y >= 150) continue
-    if (h != null && y + h <= 20) continue
+    if (y >= OVERHEAD_CM) continue
+    if (h != null && y + h <= STEP_OVER_CM) continue
     out.push(rotatedFootprint(it.x, it.z, w, d, it.rot ?? 0))
   }
   return out
@@ -60,6 +60,7 @@ export function itemColliders(items: PlacedItem[], lookup?: SizeLookup): Rect[] 
 /** Every rect a walker collides with. */
 export function buildColliders(plan: Plan, doorsOpen: Record<string, boolean>, items: PlacedItem[], lookup?: SizeLookup): Rect[] {
   const rects = staticColliders(plan)
+  // doors are open unless explicitly closed (same rule as isDoorOpen in store.ts)
   for (const d of doorOpenings(plan)) if (!(doorsOpen[d.opening.id] ?? true)) rects.push(d.rect)
   rects.push(...itemColliders(items, lookup))
   return rects

@@ -1,6 +1,8 @@
-// OWNER: Electrical Planner agent (A5). Electrical-only UI state (not shared).
+// Electrical-only UI state: panel open/closed, the placement height override and the per-TV-point
+// preview settings (persisted in localStorage separately from the main plan).
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { TV_CENTRE_CM } from '../data/tv'
 
 export interface TvPlan {
   inches: number
@@ -9,7 +11,7 @@ export interface TvPlan {
   show: boolean
 }
 
-export const DEFAULT_TV: TvPlan = { inches: 55, centre: 110, show: true }
+export const DEFAULT_TV: TvPlan = { inches: 55, centre: TV_CENTRE_CM, show: true }
 
 interface ElecUi {
   panelOpen: boolean
@@ -39,4 +41,5 @@ export const useElecUi = create<ElecUi>()(
   ),
 )
 
+/** TV preview settings of a TV point, with defaults filled in. */
 export const tvPlanFor = (tv: Record<string, TvPlan>, id: string): TvPlan => ({ ...DEFAULT_TV, ...tv[id] })

@@ -1,15 +1,10 @@
-// OWNER: Navigation agent (A3). Mutable input shared between DOM controls and the in-canvas Navigation.
+// Input plumbing shared between DOM controls and the in-canvas camera rigs: the touch joystick /
+// look-pad values (mutable, read every frame by Navigation) and small keyboard / device checks.
 
 /** Touch joystick (-1..1, y up = forward) and accumulated look deltas (degrees). */
 export const touchInput = { moveX: 0, moveY: 0, lookYaw: 0, lookPitch: 0 }
 
-/** Other modules (e.g. a furniture drag tool) can block drag-to-look while they handle a drag. */
-let lookBlocked = false
-export const setLookBlocked = (b: boolean) => {
-  lookBlocked = b
-}
-export const isLookBlocked = () => lookBlocked
-
+/** True if a key event comes from a text field, so global shortcuts must ignore it. */
 export const isTypingTarget = (t: EventTarget | null) => {
   const el = t as HTMLElement | null
   if (!el || !el.tagName) return false
@@ -17,6 +12,7 @@ export const isTypingTarget = (t: EventTarget | null) => {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
 }
 
+/** Touch-first device (coarse pointer or touch events); `?touch=1` forces it for testing. */
 export const isTouchDevice = () => {
   if (typeof window === 'undefined') return false
   if (/[?&]touch=1/.test(window.location.search)) return true

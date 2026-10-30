@@ -1,7 +1,7 @@
-// OWNER: Electrical Planner agent (A5).
 // Per point-type presets: labels, colours, default mounting heights (cm) following
 // common Indian residential practice, and the visual plate size of each modular plate.
 import type { PointType } from '../data/schema'
+import { TV_SIZES, tvPanelCm } from '../data/tv'
 
 /** One module of a modular plate (Indian 1M ≈ 22.5 mm aperture). */
 export type ModuleKind = 'rocker' | 'sock6' | 'sock16' | 'reg' | 'hdmi' | 'coax' | 'rj45' | 'usb'
@@ -188,16 +188,14 @@ export const PRESETS: Record<PointType, PointPreset> = {
   },
 }
 
+/** Every point type, in palette / CSV order. */
 export const POINT_TYPES = Object.keys(PRESETS) as PointType[]
 
 /** Standard 16:9 TV sizes offered in the TV planner (inches). */
-export const TV_SIZES = [43, 50, 55, 65, 75] as const
+export { TV_SIZES }
 
-/** 16:9 panel size (cm) for a diagonal in inches (screen only + ~1 cm bezel). */
-export function tvSizeCm(inches: number) {
-  const d = inches * 2.54
-  return { w: d * 0.8716 + 2, h: d * 0.4903 + 2, diag: d }
-}
+/** 16:9 panel size (cm, unrounded) for a diagonal in inches (screen + ~1 cm bezel). */
+export const tvSizeCm = tvPanelCm
 
 /**
  * Recommended viewing distance range (cm) for a 4K 16:9 TV:
