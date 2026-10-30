@@ -1,6 +1,6 @@
 // OWNER: UI & QA agent (A6). DOM overlay: bottom-centre room pill + hints, crosshair, welcome card.
 import { useState } from 'react'
-import { useStore } from '../store'
+import { FOV_DEFAULT, FOV_MAX, FOV_MIN, useStore } from '../store'
 import planC from '../data/planC'
 import { roomAt } from '../data/geometry'
 import type { PointType } from '../data/schema'
@@ -55,9 +55,36 @@ function useHint(): string {
     if (selectedId) return 'Drag to move · R rotates · Del deletes · Esc deselects'
     return 'Pick an item from the catalogue, or click furniture to select it'
   }
-  if (mode === 'walk') return 'Drag to look · WASD to move · Shift to run · E: doors'
+  if (mode === 'walk') return 'Drag to look · WASD to move · Shift to run · E: doors · scroll / − + to zoom'
   if (mode === 'dollhouse') return 'Drag to orbit · right-drag to pan · scroll to zoom'
   return 'Drag to pan · scroll to zoom · switch to Walk to go inside'
+}
+
+/** Zoom as a magnification relative to the default view (e.g. 0.6× = wider, 2× = closer). */
+const zoomFactor = (fov: number) => Math.tan((FOV_DEFAULT * Math.PI) / 360) / Math.tan((fov * Math.PI) / 360)
+
+function ZoomControls() {
+  const fov = useStore((s) => s.fov)
+  const zoomBy = useStore((s) => s.zoomBy)
+  const setFov = useStore((s) => s.setFov)
+  return (
+    <div className="ui-panel ui-hud-actions ui-zoom" data-testid="zoom">
+      <button className="ui-btn" onClick={() => zoomBy(10)} disabled={fov >= FOV_MAX} title="Zoom out — wider view (−)" aria-label="Zoom out">
+        −
+      </button>
+      <button
+        className="ui-btn ui-zoom-value"
+        onClick={() => setFov(FOV_DEFAULT)}
+        title={`Field of view ${fov}° — click to reset (0)`}
+        aria-label="Reset zoom"
+      >
+        {zoomFactor(fov).toFixed(1)}×
+      </button>
+      <button className="ui-btn" onClick={() => zoomBy(-10)} disabled={fov <= FOV_MIN} title="Zoom in — closer view (+)" aria-label="Zoom in">
+        +
+      </button>
+    </div>
+  )
 }
 
 export default function HUD() {
@@ -90,6 +117,7 @@ export default function HUD() {
       {mode === 'walk' && <div className="ui-crosshair" aria-hidden="true" />}
 
       <div className="ui-hud-wrap">
+        {mode === 'walk' && <ZoomControls />}
         {(measureCount > 0 || (tool === 'measure' && measureStarted)) && (
           <div className="ui-panel ui-hud-actions">
             <button className="ui-btn" onClick={undoMeasure} disabled={measureCount === 0 && !measureStarted}>

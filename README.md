@@ -32,7 +32,7 @@ npm run build
 
 | Mode | What it's for |
 |---|---|
-| **Walk** | First person at eye height (160 cm, adjustable). Drag to look, **WASD/arrows** to move, **Shift** to run, **E** to open or close the nearest door, **L** for mouse-lock look. On phones, use the joystick and look pad. |
+| **Walk** | First person at eye height (160 cm, adjustable). Drag to look, **WASD/arrows** to move, **Shift** to run, **E** to open or close the nearest door, **L** for mouse-lock look. **Zoom** for a wider or closer view: scroll the mouse wheel, pinch, press **−** / **+**, or use the − / + buttons above the room name (**0** or clicking the zoom value resets it). On phones, use the joystick and look pad. |
 | **Dollhouse** | Orbit around the flat from above, with the ceilings removed. |
 | **Plan** | Top-down view with walls cut at 120 cm. Turn on **Overlay** to see the original drawing on the floor as a scale check. |
 

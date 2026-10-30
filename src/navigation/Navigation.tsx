@@ -7,7 +7,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { planC } from '../data/planC'
 import { planBounds, roomAt } from '../data/geometry'
 import type { Teleport } from '../store'
-import { useStore } from '../store'
+import { FOV_DEFAULT, useStore } from '../store'
 import { buildColliders, findFreeSpot, moveCircle, nearestDoor, PLAYER_RADIUS } from './collision'
 import { catalogSize } from './catalogLookup'
 import { isLookBlocked, isTypingTarget, touchInput } from './input'
@@ -101,6 +101,11 @@ function WalkController({ active }: { active: boolean }) {
     } else {
       keys.current.clear()
       walkState.vx = walkState.vz = 0
+      // walk-mode zoom shouldn't carry over to the dollhouse view
+      if (camera instanceof THREE.PerspectiveCamera && camera.fov !== FOV_DEFAULT) {
+        camera.fov = FOV_DEFAULT
+        camera.updateProjectionMatrix()
+      }
       if (document.pointerLockElement === gl.domElement) document.exitPointerLock()
     }
   }, [active, camera, gl])
@@ -144,6 +149,12 @@ function WalkController({ active }: { active: boolean }) {
       } else if (e.code === 'KeyE' && !e.repeat) {
         const id = nearestDoor(planC, walkState.x, walkState.z, 130)
         if (id) useStore.getState().toggleDoor(id)
+      } else if (e.code === 'Minus' || e.code === 'NumpadSubtract') {
+        useStore.getState().zoomBy(5) // zoom out = wider view
+      } else if (e.code === 'Equal' || e.code === 'NumpadAdd') {
+        useStore.getState().zoomBy(-5)
+      } else if (e.code === 'Digit0' && !e.repeat) {
+        useStore.getState().setFov(FOV_DEFAULT)
       } else if (e.code === 'KeyL' && !e.repeat) {
         if (document.pointerLockElement === gl.domElement) document.exitPointerLock()
         else gl.domElement.requestPointerLock?.()
@@ -165,16 +176,51 @@ function WalkController({ active }: { active: boolean }) {
   useEffect(() => {
     const el = gl.domElement
     let drag: { id: number; x: number; y: number } | null = null
+    // two-finger pinch on the canvas zooms (changes the field of view)
+    const touches = new Map<number, { x: number; y: number }>()
+    let pinchDist = 0
+    const spread = () => {
+      const [a, b] = [...touches.values()]
+      return Math.hypot(a.x - b.x, a.y - b.y)
+    }
     const look = (dx: number, dy: number, sens: number) => {
-      walkState.yaw -= dx * sens
-      walkState.pitch = THREE.MathUtils.clamp(walkState.pitch - dy * sens, -PITCH_LIMIT, PITCH_LIMIT)
+      const k = sens * (useStore.getState().fov / FOV_DEFAULT) // slower look when zoomed in
+      walkState.yaw -= dx * k
+      walkState.pitch = THREE.MathUtils.clamp(walkState.pitch - dy * k, -PITCH_LIMIT, PITCH_LIMIT)
     }
     const onDown = (e: PointerEvent) => {
-      if (!activeRef.current || e.button !== 0 || isLookBlocked() || gizmoDragging() || document.pointerLockElement === el) return
+      if (!activeRef.current) return
+      if (e.pointerType === 'touch') {
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        if (touches.size === 2) {
+          drag = null
+          pinchDist = spread()
+          return
+        }
+      }
+      if (e.button !== 0 || isLookBlocked() || gizmoDragging() || document.pointerLockElement === el) return
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY }
+    }
+    const onWheel = (e: WheelEvent) => {
+      if (!activeRef.current) return
+      e.preventDefault()
+      const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+      useStore.getState().zoomBy(THREE.MathUtils.clamp(px * 0.04, -8, 8)) // scroll down = wider
     }
     const onMove = (e: PointerEvent) => {
       if (!activeRef.current) return
+      if (touches.has(e.pointerId)) {
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        if (touches.size === 2) {
+          const d = spread()
+          if (pinchDist > 0 && d > 0) {
+            const s = useStore.getState()
+            s.setFov(s.fov * (pinchDist / d)) // fingers apart = zoom in
+          }
+          pinchDist = d
+          return
+        }
+      }
       if (document.pointerLockElement === el) {
         if (e.pointerType === 'mouse') look(e.movementX, e.movementY, LOCK_SENS)
         return
@@ -189,17 +235,21 @@ function WalkController({ active }: { active: boolean }) {
       drag.y = e.clientY
     }
     const onUp = (e: PointerEvent) => {
+      touches.delete(e.pointerId)
+      if (touches.size < 2) pinchDist = 0
       if (drag && e.pointerId === drag.id) drag = null
     }
     const prevTouch = el.style.touchAction
     el.style.touchAction = 'none'
     el.addEventListener('pointerdown', onDown)
+    el.addEventListener('wheel', onWheel, { passive: false })
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', onUp)
     return () => {
       el.style.touchAction = prevTouch
       el.removeEventListener('pointerdown', onDown)
+      el.removeEventListener('wheel', onWheel)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
@@ -264,6 +314,19 @@ function WalkController({ active }: { active: boolean }) {
     tmpPos.set(w.x / 100, eye / 100, w.z / 100)
     tmpEuler.set(w.pitch * DEG, w.yaw * DEG, 0, 'YXZ')
     tmpQuat.setFromEuler(tmpEuler)
+
+    // zoom: ease the field of view toward the chosen value
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const target = useStore.getState().fov
+      const diff = target - camera.fov
+      if (Math.abs(diff) > 0.05) {
+        camera.fov += diff * (1 - Math.exp(-14 * rawDt))
+        camera.updateProjectionMatrix()
+      } else if (diff !== 0) {
+        camera.fov = target
+        camera.updateProjectionMatrix()
+      }
+    }
 
     const tw = tween.current
     if (tw) {

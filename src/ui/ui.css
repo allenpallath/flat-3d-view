@@ -205,6 +205,20 @@
   gap: 6px;
   padding: 4px;
 }
+.ui-zoom .ui-btn {
+  min-width: 34px;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ui-zoom .ui-zoom-value {
+  min-width: 52px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.ui-zoom .ui-btn:disabled {
+  opacity: 0.35;
+}
 .ui-crosshair {
   position: absolute;
   left: 50%;

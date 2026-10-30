@@ -5,6 +5,12 @@ import type { ElectricalPoint, PlacedItem, PointType, Quality, Tool, ViewMode } 
 let idCounter = 0
 export const newId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`
 
+/** Walk-mode field of view (degrees, vertical). Lower = zoomed in, higher = wider view. */
+export const FOV_DEFAULT = 65
+export const FOV_MIN = 30
+export const FOV_MAX = 110
+const clampFov = (f: number) => Math.min(FOV_MAX, Math.max(FOV_MIN, Math.round(f)))
+
 export interface Teleport {
   /** cm */
   x: number
@@ -22,6 +28,7 @@ export interface AppState {
   overlay: boolean // show the original floor-plan image on the floor
   showCeilings: boolean
   eyeHeight: number // cm
+  fov: number // walk-mode zoom, degrees
   doorsOpen: Record<string, boolean> // opening id -> open
   teleport: Teleport | null
   /** current walker position (cm) + yaw, written by navigation for the minimap/HUD */
@@ -40,6 +47,9 @@ export interface AppState {
   setMode: (m: ViewMode) => void
   setTool: (t: Tool) => void
   toggleDoor: (id: string) => void
+  /** positive = zoom out (wider), negative = zoom in */
+  zoomBy: (deltaDeg: number) => void
+  setFov: (deg: number) => void
   requestTeleport: (x: number, z: number, yawDeg?: number) => void
   addItem: (i: Omit<PlacedItem, 'id'>) => string
   updateItem: (id: string, p: Partial<PlacedItem>) => void
@@ -59,6 +69,7 @@ export const useStore = create<AppState>()(
       overlay: false,
       showCeilings: true,
       eyeHeight: 160,
+      fov: FOV_DEFAULT,
       doorsOpen: {},
       teleport: null,
       player: { x: 0, z: 0, yawDeg: 0 },
@@ -73,6 +84,8 @@ export const useStore = create<AppState>()(
       setMode: (mode) => set({ mode }),
       setTool: (tool) => set({ tool, pendingCatalogId: null, pendingPointType: null }),
       toggleDoor: (id) => set((s) => ({ doorsOpen: { ...s.doorsOpen, [id]: !(s.doorsOpen[id] ?? true) } })),
+      zoomBy: (d) => set((s) => ({ fov: clampFov(s.fov + d) })),
+      setFov: (deg) => set({ fov: clampFov(deg) }),
       requestTeleport: (x, z, yawDeg) => set((s) => ({ teleport: { x, z, yawDeg, nonce: (s.teleport?.nonce ?? 0) + 1 } })),
 
       addItem: (i) => {
@@ -100,6 +113,7 @@ export const useStore = create<AppState>()(
         points: s.points,
         quality: s.quality,
         eyeHeight: s.eyeHeight,
+        fov: s.fov,
         doorsOpen: s.doorsOpen,
       }),
     },

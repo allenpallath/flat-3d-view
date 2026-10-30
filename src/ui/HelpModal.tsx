@@ -40,7 +40,7 @@ export default function HelpModal() {
           <span><K k="Shift" /></span><span>Run (hold)</span>
           <span><K k="E" /></span><span>Open / close the nearest door</span>
           <span><K k="L" /></span><span>Toggle pointer lock (mouse look without dragging)</span>
-          <span>Wheel</span><span>Zoom (dollhouse / plan)</span>
+          <span>Wheel / <K k="−" /> <K k="+" /></span><span>Zoom out for a wider view, or in (all views); <K k="0" /> resets walk zoom</span>
           <span>Minimap</span><span>Click a spot to jump there</span>
         </div>
 
@@ -58,7 +58,7 @@ export default function HelpModal() {
           <span>Left stick</span><span>Walk (bottom-left joystick)</span>
           <span>Right pad</span><span>Drag to look (bottom-right)</span>
           <span>Tap</span><span>Place / select / measure</span>
-          <span>Pinch</span><span>Zoom (dollhouse / plan)</span>
+          <span>Pinch</span><span>Zoom in / out (all views)</span>
         </div>
 
         <h3>Project</h3>
