@@ -84,7 +84,8 @@ const bind = (key: MaterialKey, b: Binding) => bindings.push([key, b])
 // and the resolution tier (the generators are deterministic). On WebGL context loss the GPU copies
 // are gone too, so on `webglcontextrestored` every set is regenerated into the same texture objects.
 // Resolution tier: half size on touch devices (pointer: coarse) or quality 'low'. Changing quality on a
-// desktop regenerates the sets at the new size and disposes the old textures.
+// desktop regenerates the sets at the new size into the same texture objects, disposing the old GPU
+// copies (see refill), so nothing leaks and cloned materials keep working.
 
 type SetTextures = { map: THREE.DataTexture; rough: THREE.DataTexture | null; normal: THREE.DataTexture | null }
 const live = new Map<TexSetName, SetTextures>()
@@ -109,12 +110,17 @@ function dataTex(data: Uint8Array, raw: RawSet, srgb: boolean) {
   return t
 }
 
-/** Refill an existing texture (same size) after context loss; three re-uploads it on next use. */
+/**
+ * Put new pixels into an existing texture object. Materials (including clones made elsewhere, e.g.
+ * planner `tint()`) keep pointing at the same object, so nothing goes stale. When the size changes,
+ * the old GPU texture is disposed first (immutable storage cannot be resized); three then allocates
+ * and uploads a fresh one on next use. After a context loss, three has already dropped its GL state.
+ */
 function refill(t: THREE.DataTexture | null, data: Uint8Array | undefined, raw: RawSet) {
   if (!t || !data) return
   const img = t.image as { data: Uint8Array | null; width: number; height: number }
-  if (img.width !== raw.w || img.height !== raw.h) return
-  img.data = data
+  if (img.width !== raw.w || img.height !== raw.h) t.dispose()
+  t.image = { data, width: raw.w, height: raw.h }
   t.needsUpdate = true
 }
 
@@ -122,10 +128,11 @@ let resolveReady: () => void = () => {}
 /** Resolves once every procedural texture has been generated and applied. */
 export const texturesReady: Promise<void> = new Promise((r) => (resolveReady = r))
 
-function applySet(name: TexSetName, raw: RawSet, restore: boolean) {
+function applySet(name: TexSetName, raw: RawSet) {
   if (!cache) return
   const old = live.get(name)
-  if (restore && old && old.map.image.width === raw.w) {
+  if (old) {
+    // regeneration (quality tier change or context restore): reuse the texture objects
     refill(old.map, raw.col, raw)
     refill(old.rough, raw.rough, raw)
     refill(old.normal, raw.normal, raw)
@@ -151,12 +158,6 @@ function applySet(name: TexSetName, raw: RawSet, restore: boolean) {
     m.color.set(b.tint)
     m.needsUpdate = true
   }
-  // the materials now point at the new maps: free the previous GPU textures
-  if (old) {
-    old.map.dispose()
-    old.rough?.dispose()
-    old.normal?.dispose()
-  }
   invalidate() // frameloop="demand": show the new maps now
 }
 
@@ -181,7 +182,7 @@ function setOrder(): TexSetName[] {
   return order
 }
 
-function generate(scale: number, restore: boolean) {
+function generate(scale: number) {
   const myGen = ++gen
   genScale = scale
   worker?.terminate()
@@ -193,7 +194,7 @@ function generate(scale: number, restore: boolean) {
     if (myGen !== gen || !pending.has(name)) return
     pending.delete(name)
     pendingCount = pending.size
-    applySet(name, raw, restore)
+    applySet(name, raw)
     if (pending.size === 0) {
       worker?.terminate()
       worker = null
@@ -229,10 +230,10 @@ function startTextureLoad() {
   if (loadStarted) return
   loadStarted = true
   if (typeof window === 'undefined') return resolveReady() // node / tests: flat colours only
-  generate(scaleFor(currentQuality), false)
+  generate(scaleFor(currentQuality))
   // GPU copies are lost with the context and the CPU copies were released: rebuild them.
   // (capture phase: the event is dispatched on the canvas and does not bubble)
-  window.addEventListener('webglcontextrestored', () => generate(genScale, true), true)
+  window.addEventListener('webglcontextrestored', () => generate(genScale), true)
 }
 
 /** Debounced: regenerate at the tier for `q` if it differs from what is loaded / loading. */
@@ -241,7 +242,7 @@ function requestTier(q: Quality) {
   clearTimeout(regenTimer)
   regenTimer = setTimeout(() => {
     const s = scaleFor(q)
-    if (s !== genScale) generate(s, false)
+    if (s !== genScale) generate(s)
   }, 250)
 }
 

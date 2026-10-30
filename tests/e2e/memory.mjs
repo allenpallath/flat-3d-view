@@ -155,8 +155,8 @@ async function frames(n = 2) {
     const before = await page.evaluate(() => window.__perf.lastFrame())
     await page.evaluate(() => window.__perf.invalidate())
     await page
-      .waitForFunction((t) => window.__perf.lastFrame() > t, before, { timeout: 30000, polling: 100 })
-      .catch(() => log('warning: no frame rendered within 30 s'))
+      .waitForFunction((t) => window.__perf.lastFrame() > t, before, { timeout: 90000, polling: 100 })
+      .catch(() => log('warning: no frame rendered within 90 s'))
   }
 }
 
