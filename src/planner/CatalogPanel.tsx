@@ -163,7 +163,7 @@ function Inspector({ item }: { item: PlacedItem }) {
       </div>
       <div style={{ ...S.label, marginTop: 10 }}>Colour</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
-        <button style={{ ...S.btn, padding: '3px 7px', borderColor: !item.color ? ACCENT : 'rgba(255,255,255,0.14)' }} onClick={() => up({ color: undefined })}>
+        <button style={{ ...S.btn, padding: '3px 7px', border: `1px solid ${!item.color ? ACCENT : 'rgba(255,255,255,0.14)'}` }} onClick={() => up({ color: undefined })}>
           Default
         </button>
         {SWATCHES.map((c) => (
@@ -195,7 +195,7 @@ function Inspector({ item }: { item: PlacedItem }) {
         >
           Duplicate
         </button>
-        <button style={{ ...S.btn, flex: 1, background: 'rgba(220,70,70,0.25)', borderColor: 'rgba(220,70,70,0.5)' }} onClick={() => removeItem(item.id)}>
+        <button style={{ ...S.btn, flex: 1, background: 'rgba(220,70,70,0.25)', border: '1px solid rgba(220,70,70,0.5)' }} onClick={() => removeItem(item.id)}>
           Delete
         </button>
       </div>

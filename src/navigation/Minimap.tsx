@@ -54,6 +54,7 @@ const btn: React.CSSProperties = {
   fontSize: 12,
   cursor: 'pointer',
   lineHeight: 1.3,
+  whiteSpace: 'nowrap',
 }
 
 const useMedia = (q: string) => {
@@ -177,7 +178,7 @@ export default function Minimap() {
     <>
       <div style={{ ...panel, width: mapOpen ? width : undefined }} data-testid="minimap">
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: mapOpen || listOpen ? 6 : 0 }}>
-          <span style={{ fontWeight: 600, flex: 1, whiteSpace: 'nowrap' }}>{mapOpen ? (SHORT[playerRoom ?? ''] ?? 'Map') : ''}</span>
+          <span style={{ fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mapOpen ? (SHORT[playerRoom ?? ''] ?? 'Map') : ''}</span>
           {phone && (
             <button style={btn} onClick={() => setOpen(false)} title="Close" aria-label="Close map">
               ✕

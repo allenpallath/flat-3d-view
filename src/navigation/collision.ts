@@ -139,21 +139,37 @@ export function moveCircle(x: number, z: number, dx: number, dz: number, r: numb
   return { x, z }
 }
 
-/** Nearest free spot to (x,z): push out, else spiral search up to maxR cm. */
-export function findFreeSpot(x: number, z: number, r: number, rects: Rect[], maxR = 300): { x: number; z: number } {
-  if (!collides(x, z, r, rects)) return { x, z }
+/**
+ * Nearest free spot to (x,z): push out, else ring search up to maxR cm.
+ * If `within` is given (e.g. the target room's rect) the result is kept inside it
+ * (shrunk by r), so a blocked target never resolves through a wall to the outside.
+ */
+export function findFreeSpot(x: number, z: number, r: number, rects: Rect[], within?: Rect, maxR = 400): { x: number; z: number } {
+  const inside = (px: number, pz: number) =>
+    !within ||
+    within.x2 - within.x1 < 2 * r ||
+    within.z2 - within.z1 < 2 * r ||
+    (px >= within.x1 + r - 0.5 && px <= within.x2 - r + 0.5 && pz >= within.z1 + r - 0.5 && pz <= within.z2 - r + 0.5)
+  const ok = (px: number, pz: number) => inside(px, pz) && !collides(px, pz, r, rects)
+  if (within && within.x2 - within.x1 >= 2 * r && within.z2 - within.z1 >= 2 * r) {
+    // clamp the target itself into the room first
+    x = Math.min(Math.max(x, within.x1 + r), within.x2 - r)
+    z = Math.min(Math.max(z, within.z1 + r), within.z2 - r)
+  }
+  if (ok(x, z)) return { x, z }
   const p = pushOut(x, z, r, rects, 10)
-  if (!collides(p.x, p.z, r, rects) && Math.hypot(p.x - x, p.z - z) < 80) return p
-  for (let rad = 10; rad <= maxR; rad += 10) {
-    const n = Math.max(8, Math.round((2 * Math.PI * rad) / 15))
+  if (ok(p.x, p.z) && Math.hypot(p.x - x, p.z - z) < 80) return p
+  for (let rad = 5; rad <= maxR; rad += 5) {
+    const n = Math.max(8, Math.round((2 * Math.PI * rad) / 10))
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2
       const qx = x + Math.cos(a) * rad
       const qz = z + Math.sin(a) * rad
-      if (!collides(qx, qz, r, rects)) return { x: qx, z: qz }
+      if (ok(qx, qz)) return { x: qx, z: qz }
     }
   }
-  return p
+  // nothing free inside the room: fall back to any free spot
+  return within ? findFreeSpot(x, z, r, rects, undefined, maxR) : p
 }
 
 /** Nearest door-like opening within maxDist cm of (x,z). */

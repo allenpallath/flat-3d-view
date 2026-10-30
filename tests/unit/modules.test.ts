@@ -94,7 +94,7 @@ describe('navigation collision (src/navigation/collision.ts)', () => {
   it('every e2e room viewpoint is free or has a free spot nearby', () => {
     for (const r of planC.rooms) {
       const v = roomViewpoint(r.rect)
-      const f = findFreeSpot(v.x, v.z, PLAYER_RADIUS, open, 150)
+      const f = findFreeSpot(v.x, v.z, PLAYER_RADIUS, open, r.rect, 150)
       expect(collides(f.x, f.z, PLAYER_RADIUS, open), r.id).toBe(false)
     }
   })

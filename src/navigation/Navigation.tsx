@@ -1,11 +1,12 @@
 // OWNER: Navigation agent (A3). Camera rigs for walk / dollhouse / plan modes. Rendered inside <Canvas>.
 import { useEffect, useMemo, useRef } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
+import { advance, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { planC } from '../data/planC'
-import { planBounds } from '../data/geometry'
+import { planBounds, roomAt } from '../data/geometry'
+import type { Teleport } from '../store'
 import { useStore } from '../store'
 import { buildColliders, findFreeSpot, moveCircle, nearestDoor, PLAYER_RADIUS } from './collision'
 import { catalogSize } from './catalogLookup'
@@ -28,6 +29,9 @@ export const walkState = {
   vx: 0,
   vz: 0,
 }
+
+/** last teleport nonce applied (module level so a remount doesn't re-apply or miss one) */
+let appliedNonce = 0
 
 const B = planBounds(planC)
 const CENTER = { x: (B.x1 + B.x2) / 200, z: (B.z1 + B.z2) / 200 } // metres
@@ -101,25 +105,33 @@ function WalkController({ active }: { active: boolean }) {
     }
   }, [active, camera, gl])
 
-  // teleport requests
-  useEffect(
-    () =>
-      useStore.subscribe((s, prev) => {
-        const t = s.teleport
-        if (!t || t === prev.teleport) return
-        const p = findFreeSpot(t.x, t.z, PLAYER_RADIUS, collRef.current)
-        walkState.x = p.x
-        walkState.z = p.z
-        walkState.vx = walkState.vz = 0
-        if (t.yawDeg != null) walkState.yaw = t.yawDeg
-        walkState.pitch = -5
-        lastTeleport.current = performance.now()
-        tween.current = null
-        if (s.mode === 'walk') snapCamera()
-        s.set({ player: { x: Math.round(p.x), z: Math.round(p.z), yawDeg: Math.round(walkState.yaw) } })
-      }),
-    [],
-  )
+  // teleport requests (also applies one that arrived before this component mounted)
+  useEffect(() => {
+    const apply = (t: Teleport | null) => {
+      if (!t || t.nonce === appliedNonce) return
+      appliedNonce = t.nonce
+      const s = useStore.getState()
+      const room = roomAt(planC, t.x, t.z)
+      const p = findFreeSpot(t.x, t.z, PLAYER_RADIUS, collRef.current, room?.rect)
+      walkState.x = p.x
+      walkState.z = p.z
+      walkState.vx = walkState.vz = 0
+      if (t.yawDeg != null) walkState.yaw = t.yawDeg
+      walkState.pitch = -5
+      lastTeleport.current = performance.now()
+      tween.current = null
+      if (s.mode === 'walk') {
+        snapCamera()
+        // render a frame right away so the new view is on screen before anything else (screenshots, slow GPUs)
+        queueMicrotask(() => advance(performance.now()))
+      }
+      s.set({ player: { x: Math.round(p.x), z: Math.round(p.z), yawDeg: Math.round(walkState.yaw) } })
+    }
+    apply(useStore.getState().teleport)
+    return useStore.subscribe((s, prev) => {
+      if (s.teleport !== prev.teleport) apply(s.teleport)
+    })
+  }, [])
 
   // keyboard
   useEffect(() => {
@@ -255,7 +267,7 @@ function WalkController({ active }: { active: boolean }) {
 
     const tw = tween.current
     if (tw) {
-      tw.t = Math.min(1, tw.t + dt / 0.8)
+      tw.t = Math.min(1, tw.t + rawDt / 0.8) // wall-clock: finishes on time even at low fps
       const e = easeInOut(tw.t)
       camera.position.lerpVectors(tw.pos, tmpPos, e)
       camera.quaternion.slerpQuaternions(tw.quat, tmpQuat, e)
@@ -296,7 +308,7 @@ function DollhouseView() {
   useFrame((_, dt) => {
     const tw = tween.current
     if (!tw) return
-    tw.t = Math.min(1, tw.t + Math.min(dt, 0.1) / 1.0)
+    tw.t = Math.min(1, tw.t + dt / 1.0)
     camera.position.lerpVectors(tw.from, tw.to, easeInOut(tw.t))
     camera.lookAt(target)
     controls.current?.update()
