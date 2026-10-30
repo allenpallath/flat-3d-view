@@ -3,6 +3,21 @@ import type { RawSet } from './textures'
 import type { TexSetName } from './generators'
 import type { Quality } from '../data/schema'
 
+// HDR safety: a sharp highlight (sun or a downlight glinting off glass, polished tile, steel or
+// ceramic) can exceed the half-float range of the post-processing buffers. It then becomes Inf/NaN
+// and bloom/AO/SMAA smear it into black flickering blotches at certain viewing angles.
+// Clamp every built-in material's output to a generous HDR ceiling and drop NaNs, before any compile.
+const HDR_GUARD = '\n#include <hdr_guard>'
+if (!THREE.ShaderChunk.opaque_fragment.includes(HDR_GUARD)) {
+  ;(THREE.ShaderChunk as Record<string, string>).hdr_guard = [
+    // NaN can't be recovered: emit nothing for that pixel instead of a value that spreads
+    'if ( any( isnan( gl_FragColor ) ) ) gl_FragColor = vec4( 0.0 );',
+    // +Inf and over-bright highlights are capped (still well above white, so bloom keeps working)
+    'gl_FragColor = vec4( min( gl_FragColor.rgb, vec3( 48.0 ) ), clamp( gl_FragColor.a, 0.0, 1.0 ) );',
+  ].join('\n')
+  THREE.ShaderChunk.opaque_fragment += HDR_GUARD
+}
+
 // OWNER: Materials & Lighting agent (A2).
 // Contract: getMaterials() returns memoised singleton materials keyed by name.
 // Other modules must only use these keys (do not create ad-hoc materials for surfaces listed here).
