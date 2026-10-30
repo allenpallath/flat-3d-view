@@ -1,6 +1,7 @@
 // Room culling (walk mode): objects in rooms that can't be seen from where you stand — walls and
 // closed doors in between — are moved to a hidden layer, so they're neither drawn nor clickable.
 // Walls and the outdoors always stay. Dollhouse / plan views show everything.
+// The visible set comes from the room graph in data/visibility.ts (rooms within two open-door hops).
 import { useEffect, useMemo } from 'react'
 import { useThree } from '@react-three/fiber'
 import type * as THREE from 'three'
@@ -10,6 +11,7 @@ import { roomLinks, roomsNear, visibleRooms } from '../data/visibility'
 import { isDoorOpen, useStore } from '../store'
 import { markShadowsDirty } from '../materials/shadows'
 
+/** A layer the camera never renders and raycasters never test (both use layer 0 only). */
 const HIDDEN_LAYER = 5
 const CULLED_KINDS = new Set(['floor', 'ceiling', 'fixture', 'furniture', 'point'])
 const RESCAN_MS = 600 // pick up meshes that mount later (new furniture, LOD swaps)
@@ -55,6 +57,7 @@ function apply(root: THREE.Object3D, visible: Set<string> | null) {
   visit(root)
 }
 
+/** Inert component: keeps the culling layers in sync with the walker, doors, items and mode. */
 export default function RoomCulling() {
   const scene = useThree((s) => s.scene)
   const invalidate = useThree((s) => s.invalidate)

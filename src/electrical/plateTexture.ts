@@ -1,4 +1,3 @@
-// OWNER: Electrical Planner agent (A5).
 // Procedural canvas drawings of Indian modular switch/socket plates (front face).
 import * as THREE from 'three'
 import type { PointType } from '../data/schema'
@@ -170,7 +169,7 @@ function label(ctx: CanvasRenderingContext2D, t: string, x: number, y: number) {
 
 const canvasCache = new Map<string, HTMLCanvasElement>()
 
-/** Front face of a plate drawn on a canvas (PX px/cm). `variant` = 'wall' | 'ceiling' for round plates. */
+/** Front face of a point type's plate drawn on a canvas (PX px/cm), cached per type. */
 export function plateCanvas(type: PointType): HTMLCanvasElement {
   const hit = canvasCache.get(type)
   if (hit) return hit
@@ -245,6 +244,7 @@ export function plateCanvas(type: PointType): HTMLCanvasElement {
 
 const texCache = new Map<string, THREE.CanvasTexture>()
 
+/** The plate drawing as a shared texture for the 3D plates (cached, never disposed). */
 export function plateTexture(type: PointType): THREE.CanvasTexture {
   const hit = texCache.get(type)
   if (hit) return hit
@@ -257,7 +257,7 @@ export function plateTexture(type: PointType): THREE.CanvasTexture {
 
 const urlCache = new Map<string, string>()
 
-/** PNG data URL of the plate (palette thumbnails). */
+/** PNG data URL of the plate (palette thumbnails), cached. */
 export function plateDataUrl(type: PointType): string {
   const hit = urlCache.get(type)
   if (hit) return hit

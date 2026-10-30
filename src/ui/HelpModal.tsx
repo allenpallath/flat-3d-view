@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). Controls / help modal (portal to body).
+// Controls / help modal (portal to body).
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useUI } from './uiStore'
@@ -6,6 +6,7 @@ import { IconClose } from './icons'
 
 const K = ({ k }: { k: string }) => <kbd>{k}</kbd>
 
+/** Controls reference, opened from the toolbar or the welcome card. */
 export default function HelpModal() {
   const open = useUI((s) => s.helpOpen)
   const setHelp = useUI((s) => s.setHelp)

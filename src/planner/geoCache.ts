@@ -1,8 +1,7 @@
-// OWNER: Furniture Planner agent (A4).
 // Shared, reference-counted cache of merged furniture geometry. Identical items (same catalog entry,
 // size and colour, e.g. the six dining chairs) share ONE BufferGeometry. The geometry is disposed
 // when the last user releases it (deferred by a tick, so a remount in the same commit reuses it).
-// Materials are shared singletons (A2 / models.tsx caches) and are never disposed here.
+// Materials are shared singletons (getMaterials() / models.tsx caches) and are never disposed here.
 import { useLayoutEffect, useMemo } from 'react'
 import type { BufferGeometry, Material } from 'three'
 import { getEntry } from './catalog'
@@ -18,6 +17,7 @@ export interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>()
 
+/** Cache key: everything that changes the built geometry (LOD level, model, size, colour, TV size). */
 export function geoKey(p: FurnitureModelProps, lod: boolean) {
   const inches = getEntry(p.catalogId)?.inches ?? ''
   return `${lod ? 'lod' : 'hi'}|${p.catalogId}|${p.w}|${p.d}|${p.h}|${p.color ?? ''}|${inches}`
@@ -46,6 +46,7 @@ function scheduleCollect(e: CacheEntry) {
   }, 0)
 }
 
+/** Take a reference to an entry (resurrecting it if it was just collected). */
 export function retain(e: CacheEntry) {
   if (e.disposed) {
     // collected in between (shouldn't happen): resurrect; three re-uploads the CPU-side data
@@ -55,6 +56,7 @@ export function retain(e: CacheEntry) {
   e.refs++
 }
 
+/** Drop a reference; the last one schedules disposal. */
 export function release(e: CacheEntry) {
   e.refs--
   if (e.refs <= 0) {
@@ -74,5 +76,3 @@ export function useFurnitureGeometry(p: FurnitureModelProps, lod = false): Cache
   return entry
 }
 
-/** debug / tests */
-export const geoCacheStats = () => ({ entries: cache.size, refs: [...cache.values()].reduce((a, e) => a + e.refs, 0) })

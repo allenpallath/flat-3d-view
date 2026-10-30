@@ -1,4 +1,4 @@
-/* OWNER: UI & QA agent (A6). Styles for toolbar / HUD / modals. All classes prefixed .ui- */
+/* Styles for toolbar / HUD / modals. All classes prefixed .ui- */
 .ui-panel {
   background: rgba(20, 22, 26, 0.82);
   -webkit-backdrop-filter: blur(10px);

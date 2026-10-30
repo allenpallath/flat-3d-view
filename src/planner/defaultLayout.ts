@@ -1,4 +1,3 @@
-// OWNER: Furniture Planner agent (A4).
 // The furniture shown on the developer's drawing (public/floorplan-c.webp), positioned to match it.
 // Drawing px -> plan cm: x = (px - 300) / 1.12, z = (py - 100) / 1.12. rot: 0 = front faces south (+z),
 // 90 = faces east, 180 = faces north, -90 = faces west.
@@ -56,10 +55,12 @@ export const DEFAULT_LAYOUT: Seed[] = [
   { catalogId: 'balconyChair', x: 386, z: 108, rot: 104 },
 ]
 
+/** The drawing's layout as new placed items (fresh ids, default elevations). */
 export function buildDefaultLayout(): PlacedItem[] {
   return DEFAULT_LAYOUT.map((s) => ({ ...s, y: s.y ?? getEntry(s.catalogId)?.y ?? 0, id: newId('item') }))
 }
 
+/** Replace all furniture with the drawing's layout. */
 export function loadDefaultLayout() {
   useStore.getState().replaceAll({ items: buildDefaultLayout() })
 }

@@ -1,4 +1,5 @@
-// OWNER: Furniture Planner agent (A4). Planner-local UI state (not persisted).
+// Planner-local UI state (not persisted): gizmo mode, placement-ghost rotation / overlap flag, plus the
+// global `window.__gizmoDragging` flag that navigation reads to suspend drag-to-look.
 import { create } from 'zustand'
 
 export interface PlannerState {
@@ -10,6 +11,7 @@ export interface PlannerState {
   set: (p: Partial<PlannerState>) => void
 }
 
+/** Furniture-tool UI store. */
 export const usePlanner = create<PlannerState>()((set) => ({
   gizmoMode: 'translate',
   ghostRot: 0,

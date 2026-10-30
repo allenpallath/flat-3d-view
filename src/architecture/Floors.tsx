@@ -1,10 +1,11 @@
-// OWNER: Architecture agent (A1). Room floors, door thresholds and the base slab.
+// Room floors (tagged {kind:'floor', roomId} for placement and culling), marble thresholds in every
+// floor-level opening, and the base slab under the whole flat.
 import { useMemo } from 'react'
 import planC from '../data/planC'
 import { planBounds, roomAt } from '../data/geometry'
 import type { FloorMaterial, Rect } from '../data/schema'
 import { getMaterials } from '../materials/materials'
-import { BMesh, useBuilt, wallFrame } from './common'
+import { BMesh, GAP_FILLS, useBuilt, wallFrame } from './common'
 
 interface FloorPatch {
   key: string
@@ -14,12 +15,9 @@ interface FloorPatch {
   y: number
 }
 
-/** Floor areas not covered by any room rect (open gap between hall and kitchen etc.). */
-const FILLS: { roomId: string; rect: Rect }[] = [{ roomId: 'hall', rect: { x1: 76, z1: 622, x2: 330, z2: 634 } }]
-
 function floorPatches(): FloorPatch[] {
   const out: FloorPatch[] = planC.rooms.map((r) => ({ key: r.id, roomId: r.id, rect: r.rect, mat: r.floor, y: 0 }))
-  FILLS.forEach((f, i) => out.push({ key: `fill${i}`, roomId: f.roomId, rect: f.rect, mat: 'hallTile', y: 0 }))
+  GAP_FILLS.forEach((f, i) => out.push({ key: `fill${i}`, roomId: f.roomId, rect: f.rect, mat: 'hallTile', y: 0 }))
   // Marble thresholds in every floor-level opening.
   for (const w of planC.walls) {
     const fr = wallFrame(w)
@@ -27,8 +25,11 @@ function floorPatches(): FloorPatch[] {
       if (o.sill > 0 || o.kind === 'window' || o.kind === 'ventilator') continue
       const b = fr.box(o.from, o.to, 0, 0, fr.t0, fr.t1)
       const rect = { x1: b.min[0], z1: b.min[2], x2: b.max[0], z2: b.max[2] }
-      const mid = fr.pt((o.from + o.to) / 2, fr.t1 + 5)
-      const room = roomAt(planC, mid.x, mid.z) ?? roomAt(planC, fr.pt((o.from + o.to) / 2, fr.t0 - 5).x, fr.pt((o.from + o.to) / 2, fr.t0 - 5).z)
+      // the threshold belongs to the room 5 cm past either face of the wall (for culling)
+      const s = (o.from + o.to) / 2
+      const a = fr.pt(s, fr.t1 + 5)
+      const c = fr.pt(s, fr.t0 - 5)
+      const room = roomAt(planC, a.x, a.z) ?? roomAt(planC, c.x, c.z)
       out.push({ key: `th_${o.id}`, roomId: room?.id ?? 'hall', rect, mat: 'stoneTop', y: 0 })
     }
   }
@@ -45,6 +46,7 @@ function FloorPatchMesh({ p }: { p: FloorPatch }) {
   return <BMesh built={built} tag={{ kind: 'floor', roomId: p.roomId }} />
 }
 
+/** All floor patches plus the slab. */
 export default function Floors() {
   const patches = useMemo(floorPatches, [])
   const mats = getMaterials()

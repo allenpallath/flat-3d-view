@@ -1,5 +1,5 @@
-// OWNER: Architecture agent (A1). Walls (with holes), parapets, railings, glass walls,
-// skirting and toilet wall tiling. One mesh (per opaque/transparent) per wall, tagged with its wallId.
+// Walls (with holes for openings), parapets, glass railings, glass walls, skirting and toilet wall
+// tiling. One mesh (per opaque/transparent) per wall, tagged {kind:'wall', wallId}.
 import { useMemo } from 'react'
 import planC from '../data/planC'
 import { wallAxis, wallBoxes } from '../data/geometry'
@@ -8,11 +8,11 @@ import { getMaterials } from '../materials/materials'
 import type { GeoBuilder } from './builder'
 import { BMesh, useBuilt, useCut, wallFrame } from './common'
 
-const SKIRT_H = 8
-const SKIRT_T = 1
-const TILE_H = 210
-const TILE_T = 1
-const TOL = 1.5
+const SKIRT_H = 8 // skirting height, cm
+const SKIRT_T = 1 // skirting thickness, cm
+const TILE_H = 210 // toilet wall tiling height, cm
+const TILE_T = 1 // tile thickness, cm
+const TOL = 1.5 // cm: a room side within this of a wall face lies on it
 
 interface FaceStrip {
   wall: Wall
@@ -68,6 +68,7 @@ function stripBoxes(s: FaceStrip, h: number): Box[] {
 
 const isToilet = (r: Room) => r.floor === 'toiletTile'
 
+/** Geometry of one wall by kind, plus the skirting / tile strips that sit on its faces. */
 function buildWall(b: GeoBuilder, w: Wall, skirts: FaceStrip[], tiles: FaceStrip[]) {
   const m = getMaterials()
   const fr = wallFrame(w)
@@ -127,6 +128,7 @@ function WallMesh({ w, skirts, tiles, cut }: { w: Wall; skirts: FaceStrip[]; til
   return <BMesh built={built} tag={{ kind: 'wall', wallId: w.id }} />
 }
 
+/** Every wall of the plan. */
 export default function Walls() {
   const cut = useCut()
   const { skirts, tiles } = useMemo(() => {

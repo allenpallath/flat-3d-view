@@ -1,4 +1,3 @@
-// OWNER: Furniture Planner agent (A4).
 // Imperative geometry builder for the procedural furniture models. Every primitive is baked into
 // world-of-the-item space (metres) and bucketed per material; build() merges them into ONE
 // BufferGeometry with one group per material, so an item is a single (multi-material) mesh.

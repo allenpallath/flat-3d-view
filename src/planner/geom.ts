@@ -1,6 +1,8 @@
-// OWNER: Furniture Planner agent (A4). Pure geometry helpers (cm) for placement, overlap and wall distances.
+// Pure geometry helpers (cm) for furniture placement: rotated footprints, overlap tests against walls,
+// fixtures and other items (separating axis test), an analytic ray cast against the plan, the nearest
+// wall face and the clear distance to the walls around an item.
 import planC from '../data/planC'
-import { fixtureBox, wallBoxes } from '../data/geometry'
+import { fixtureBox, isSolidFixture, wallBoxes } from '../data/geometry'
 import type { Box, PlacedItem } from '../data/schema'
 import { footprintRects, getEntry, itemDims } from './catalog'
 
@@ -9,10 +11,11 @@ export interface WallBox extends Box {
 }
 
 export const WALL_BOXES: WallBox[] = planC.walls.flatMap((w) => wallBoxes(w).map((b) => ({ ...b, wallId: w.id })))
-const FIXTURE_BOXES: Box[] = planC.fixtures.filter((f) => f.type !== 'showerDrain' && f.type !== 'hob' && f.type !== 'sink').map(fixtureBox)
+const FIXTURE_BOXES: Box[] = planC.fixtures.filter(isSolidFixture).map(fixtureBox)
 /** walls + fixtures (3D, cm) used for the overlap test */
 export const STATIC_BOXES: Box[] = [...WALL_BOXES, ...FIXTURE_BOXES]
 
+/** Flat items (rugs) never collide: other furniture stands on them. */
 export const isFlat = (catalogId: string, h: number) => h <= 2 || getEntry(catalogId)?.model === 'rug'
 
 type P2 = [number, number]
@@ -33,6 +36,7 @@ export function footprintPolys(catalogId: string, x: number, z: number, rot: num
   })
 }
 
+/** Axis-aligned bounds (cm) of a set of polygons. */
 export function polyBounds(polys: P2[][]) {
   let x1 = Infinity
   let z1 = Infinity
@@ -114,6 +118,8 @@ export function collides(catalogId: string, pose: Pose, dims: { w: number; d: nu
 }
 
 // ------------------------------------------------------------------ rays (cm)
+/** The floor plane only counts as hit inside this rect (cm): the flat incl. wash niche and balcony planters. */
+const FLOOR_HIT = { x1: -80, z1: -25, x2: 960, z2: 925 }
 export interface RayHit {
   t: number
   x: number
@@ -127,6 +133,7 @@ export interface RayHit {
 /** Analytic ray cast against the plan's walls (capped at maxWallH) and the floor plane. o in cm, dir normalised. */
 export function rayPlan(o: [number, number, number], dir: [number, number, number], maxWallH = 9999): RayHit | null {
   let best: RayHit | null = null
+  // slab test per wall box: the entry distance t0 is the largest per-axis entry, its axis the hit face
   for (const b of WALL_BOXES) {
     const mn = [b.min[0], b.min[1], b.min[2]]
     const mx = [b.max[0], Math.min(b.max[1], maxWallH), b.max[2]]
@@ -177,7 +184,7 @@ export function rayPlan(o: [number, number, number], dir: [number, number, numbe
     if (t > 0 && (!best || t < best.t)) {
       const x = o[0] + dir[0] * t
       const z = o[2] + dir[2] * t
-      if (x > -80 && x < 960 && z > -25 && z < 925) best = { t, x, y: 0, z, nx: 0, nz: 0, kind: 'floor' }
+      if (x > FLOOR_HIT.x1 && x < FLOOR_HIT.x2 && z > FLOOR_HIT.z1 && z < FLOOR_HIT.z2) best = { t, x, y: 0, z, nx: 0, nz: 0, kind: 'floor' }
     }
   }
   return best

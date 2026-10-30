@@ -1,8 +1,12 @@
+// The shared app state (zustand): view mode, tool, settings, doors, the walker's position, placed
+// furniture and electrical points. Furniture, points and settings are persisted to localStorage.
+// Positions are plan cm; the store never holds three.js objects.
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { ElectricalPoint, PlacedItem, PointType, Quality, Tool, ViewMode } from './data/schema'
 
 let idCounter = 0
+/** Unique id for an item / point: prefix + time + counter (unique within and across sessions). */
 export const newId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`
 
 /** Walk-mode field of view (degrees, vertical). Lower = zoomed in, higher = wider view. */
@@ -20,6 +24,7 @@ export interface Teleport {
   nonce: number
 }
 
+/** Shared state and actions; `set` is the escape hatch for plain field updates. */
 export interface AppState {
   // view
   mode: ViewMode
@@ -60,6 +65,7 @@ export interface AppState {
   replaceAll: (data: { items?: PlacedItem[]; points?: ElectricalPoint[] }) => void
 }
 
+/** The app store (persisted subset: items, points, quality, eye height, fov, doors). */
 export const useStore = create<AppState>()(
   persist(
     (set) => ({

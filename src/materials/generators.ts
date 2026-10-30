@@ -1,4 +1,3 @@
-// OWNER: Materials & Lighting agent (A2).
 // Pure procedural texture generators (no three.js objects, no DOM) so they can run in a Web Worker.
 import { Noise, buildRaw, cellRand, gridDist, hex, lerp, smooth, type RawSet } from './textures'
 

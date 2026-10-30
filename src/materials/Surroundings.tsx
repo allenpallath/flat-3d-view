@@ -1,7 +1,6 @@
-// OWNER: Materials & Lighting agent (A2).
 // Outdoor context so windows don't look into a void: lawn, paved apron + plinth around the flat,
 // a ring of simple trees and a few neighbouring apartment blocks far away. Not raycastable.
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import planC from '../data/planC'
 import { planBounds } from '../data/geometry'
@@ -10,8 +9,9 @@ import { useStore } from '../store'
 import { getMaterials } from './materials'
 
 const noRaycast = () => null
-const GROUND_Y = -0.12
+const GROUND_Y = -0.12 // m: outdoor ground level, below the flat's floor slab
 
+/** Plane whose UVs are in metres (so tiled textures show at real size). */
 function metrePlane(w: number, h: number) {
   const g = new THREE.PlaneGeometry(w, h)
   const uv = g.attributes.uv as THREE.BufferAttribute
@@ -32,6 +32,7 @@ function metreBox(w: number, h: number, d: number) {
   return g
 }
 
+/** Canvas-textured material for the distant apartment blocks (owned here, disposed with them). */
 function facadeMaterial() {
   // 256 px = 6 m x 6 m: two bays x two floors of an apartment block
   let tex: THREE.Texture | null = null
@@ -78,6 +79,7 @@ const rnd = (i: number) => {
   return x - Math.floor(x)
 }
 
+/** Instanced ring of simple trees around the flat. */
 function Trees({ cx, cz, count }: { cx: number; cz: number; count: number }) {
   const trunks = useRef<THREE.InstancedMesh>(null)
   const crowns = useRef<THREE.InstancedMesh>(null)
@@ -89,6 +91,15 @@ function Trees({ cx, cz, count }: { cx: number; cz: number; count: number }) {
       crownMat: new THREE.MeshStandardMaterial({ color: '#4d6e34', roughness: 0.9, flatShading: true }),
     }),
     [],
+  )
+  useEffect(
+    () => () => {
+      geo.trunk.dispose()
+      geo.crown.dispose()
+      geo.trunkMat.dispose()
+      geo.crownMat.dispose()
+    },
+    [geo],
   )
   useLayoutEffect(() => {
     const m = new THREE.Matrix4()
@@ -120,6 +131,7 @@ function Trees({ cx, cz, count }: { cx: number; cz: number; count: number }) {
   )
 }
 
+/** Ground, apron, plinth, trees and neighbouring blocks. Shared getMaterials() materials are not disposed here. */
 export default function Surroundings() {
   const high = useStore((s) => s.quality) === 'high'
   const mats = getMaterials()
@@ -153,6 +165,17 @@ export default function Surroundings() {
       facade: facadeMaterial(),
     }
   }, [])
+  useEffect(
+    () => () => {
+      data.ground.dispose()
+      data.apron.dispose()
+      data.plinth.dispose()
+      for (const k of data.blocks) k.geo.dispose()
+      ;(data.facade.map as THREE.Texture | null)?.dispose()
+      data.facade.dispose()
+    },
+    [data],
+  )
 
   return (
     <group>

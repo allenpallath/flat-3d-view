@@ -1,3 +1,5 @@
+// Plan data for flat type C: rooms, walls with their openings, fixed fixtures and the walk-mode spawn.
+// The single source of truth for the building; architecture, collision, minimap and tools all derive from it.
 import type { Plan } from './schema'
 
 // Flat type "C". All values in cm, traced from the developer's drawing

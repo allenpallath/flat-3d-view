@@ -1,4 +1,3 @@
-// OWNER: UI & QA agent (A6).
 // `npm run e2e:memory`: GPU-resource leak regression test.
 // Builds the app, serves it with `vite preview` on port 5194, opens it in headless Chromium with `?perf`
 // (needs <PerfProbe/> mounted in the Canvas: it exposes window.__perf), then:

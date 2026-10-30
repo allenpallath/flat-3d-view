@@ -59,7 +59,7 @@ const B = planBounds(planC)
 const CENTER = { x: toM((B.x1 + B.x2) / 2), z: toM((B.z1 + B.z2) / 2) } // metres
 const SPAN = { x: toM(B.x2 - B.x1), z: toM(B.z2 - B.z1) } // metres
 
-/** set by the furniture planner (A4) while a transform gizmo is being dragged */
+/** set by the furniture planner (plannerStore.ts) while a transform gizmo is being dragged */
 const gizmoDragging = () => !!(window as unknown as { __gizmoDragging?: boolean }).__gizmoDragging
 
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
@@ -107,11 +107,15 @@ function WalkController({ active }: { active: boolean }) {
   const tween = useRef<{ t: number; pos: THREE.Vector3; quat: THREE.Quaternion } | null>(null)
   const lastTeleport = useRef(-1e9)
 
+  const tmpPos = useMemo(() => new THREE.Vector3(), [])
+  const tmpQuat = useMemo(() => new THREE.Quaternion(), [])
+  const tmpEuler = useMemo(() => new THREE.Euler(0, 0, 0, 'YXZ'), [])
+
   /** Put the camera exactly at the walker's eye (no tween). */
   const snapCamera = () => {
     const cam = getThree().camera
     cam.position.set(toM(walkState.x), toM(useStore.getState().eyeHeight), toM(walkState.z))
-    cam.quaternion.setFromEuler(new THREE.Euler(walkState.pitch * DEG, walkState.yaw * DEG, 0, 'YXZ'))
+    cam.quaternion.setFromEuler(tmpEuler.set(walkState.pitch * DEG, walkState.yaw * DEG, 0, 'YXZ'))
     cam.updateMatrixWorld()
   }
 
@@ -215,8 +219,11 @@ function WalkController({ active }: { active: boolean }) {
     // two-finger pinch on the canvas zooms (changes the field of view)
     const touches = new Map<number, { x: number; y: number }>()
     let pinchDist = 0
+    /** Distance (px) between the two touches (only called while exactly two are down). */
     const spread = () => {
-      const [a, b] = [...touches.values()]
+      const it = touches.values()
+      const a = it.next().value!
+      const b = it.next().value!
       return Math.hypot(a.x - b.x, a.y - b.y)
     }
     const look = (dx: number, dy: number, sens: number) => {
@@ -246,8 +253,10 @@ function WalkController({ active }: { active: boolean }) {
     }
     const onMove = (e: PointerEvent) => {
       if (!activeRef.current) return
-      if (touches.has(e.pointerId)) {
-        touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      const t = touches.get(e.pointerId)
+      if (t) {
+        t.x = e.clientX // update in place: no allocation per move
+        t.y = e.clientY
         if (touches.size === 2) {
           const d = spread()
           if (pinchDist > 0 && d > 0) {
@@ -292,10 +301,6 @@ function WalkController({ active }: { active: boolean }) {
       window.removeEventListener('pointercancel', onUp)
     }
   }, [gl])
-
-  const tmpPos = useMemo(() => new THREE.Vector3(), [])
-  const tmpQuat = useMemo(() => new THREE.Quaternion(), [])
-  const tmpEuler = useMemo(() => new THREE.Euler(0, 0, 0, 'YXZ'), [])
 
   useFrame((state, rawDt) => {
     if (!activeRef.current) return

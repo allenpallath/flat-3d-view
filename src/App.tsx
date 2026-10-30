@@ -1,4 +1,5 @@
-// OWNER: Manager. Wires the modules together; each module owns its own folder.
+// Root component: the 3D <Canvas> with every scene layer, plus the DOM overlays (toolbar, HUD,
+// minimap, side panels). Modules talk to each other only through the zustand store (store.ts).
 import { Suspense, useEffect } from 'react'
 import { Canvas, invalidate, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -16,6 +17,7 @@ import Toolbar from './ui/Toolbar'
 import HUD from './ui/HUD'
 import MeasureTool from './ui/MeasureTool'
 import PlanOverlay from './ui/PlanOverlay'
+import PerfProbe from './ui/PerfProbe'
 import { useStore } from './store'
 
 /** Rendering is on demand: any store change (mode, tool, items, points, doors, settings) redraws. */
@@ -28,11 +30,15 @@ function InvalidateOnStoreChange() {
 function SceneHook() {
   const scene = useThree((s) => s.scene)
   useEffect(() => {
-    ;(window as any).__scene = scene
+    ;(window as unknown as { __scene: THREE.Scene }).__scene = scene
   }, [scene])
   return null
 }
 
+/**
+ * Rendering is on demand (frameloop="demand"): a frame is drawn only after invalidate(), so anything
+ * that animates (doors, camera glides, shadow updates) keeps calling invalidate() until it settles.
+ */
 export default function App() {
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
@@ -41,7 +47,8 @@ export default function App() {
         shadows
         frameloop="demand"
         dpr={[1, 2]}
-        gl={{ antialias: true, preserveDrawingBuffer: true, toneMapping: THREE.ACESFilmicToneMapping }}
+        // tone mapping is set by <Lighting/> (AgX); preserveDrawingBuffer keeps screenshots working
+        gl={{ antialias: true, preserveDrawingBuffer: true, toneMapping: THREE.AgXToneMapping }}
         camera={{ fov: 65, near: 0.1, far: 200, position: [1.5, 1.6, 1.5] }}
       >
         <Suspense fallback={null}>
@@ -56,6 +63,7 @@ export default function App() {
         <Navigation />
         <RoomCulling />
         <SceneHook />
+        <PerfProbe />
         <InvalidateOnStoreChange />
       </Canvas>
       <Toolbar />

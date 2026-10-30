@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). DOM overlay: bottom-centre room pill + hints, crosshair, welcome card.
+// DOM overlay: bottom-centre room pill + hints, crosshair, welcome card.
 import { useState } from 'react'
 import { FOV_DEFAULT, FOV_MAX, FOV_MIN, useStore } from '../store'
 import planC from '../data/planC'
@@ -48,7 +48,7 @@ function useHint(): string {
       : 'Click a point on any surface to start measuring · Esc to stop'
   if (tool === 'electrical') {
     if (pendingPointType) return `Click a wall to place a ${POINT_LABEL[pendingPointType] ?? prettify(pendingPointType)} — Esc to stop`
-    if (selectedId) return 'Drag to move the point · Del deletes · Esc deselects'
+    if (selectedId) return 'Edit the point in the panel · Del deletes · Esc deselects'
     return 'Pick a point type in the panel, or click a point to edit it'
   }
   if (tool === 'furniture') {
@@ -88,6 +88,7 @@ function ZoomControls() {
   )
 }
 
+/** Bottom-centre HUD: current room, context hint, zoom and measure buttons, perf overlay, welcome card. */
 export default function HUD() {
   const mode = useStore((s) => s.mode)
   const tool = useStore((s) => s.tool)

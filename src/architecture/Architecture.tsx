@@ -1,4 +1,4 @@
-// OWNER: Architecture agent (A1). Builds apartment type C from planC, to scale (cm -> m).
+// The building itself, generated from planC (src/data/planC.ts) to scale (cm -> m):
 //   Floors   – room floors (UV 1 = 1 m), thresholds, base slab
 //   Walls    – walls with holes, parapets, glass railings, glass walls, skirting, toilet tiling
 //   Openings – hinged doors (animated, click to toggle), main door, sliding glass doors, windows, ventilators
@@ -11,6 +11,7 @@ import Floors from './Floors'
 import Openings from './Openings'
 import Walls from './Walls'
 
+/** Static building geometry; every piece is tagged (MeshTag) so tools can raycast it. */
 export default function Architecture() {
   return (
     <group name="architecture">

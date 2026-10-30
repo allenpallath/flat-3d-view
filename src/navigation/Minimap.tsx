@@ -1,4 +1,5 @@
-// OWNER: Navigation agent (A3). DOM overlay: top-right minimap + quick-teleport room list (+ touch controls).
+// DOM overlay, top right: an SVG minimap (rooms, walls, door states, walker + view cone) and a room list.
+// Clicking a room teleports the walker there. Also mounts the touch joystick / look pad.
 import { useEffect, useMemo, useState } from 'react'
 import { planC } from '../data/planC'
 import { planBounds, rectCenter, roomAt } from '../data/geometry'
@@ -57,6 +58,7 @@ const btn: React.CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
+/** Live result of a CSS media query. */
 const useMedia = (q: string) => {
   const [small, setSmall] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(q).matches)
   useEffect(() => {
@@ -65,25 +67,28 @@ const useMedia = (q: string) => {
     const on = () => setSmall(m.matches)
     m.addEventListener('change', on)
     return () => m.removeEventListener('change', on)
-  }, [])
+  }, [q])
   return small
 }
 const useSmallScreen = () => useMedia('(max-width: 640px)')
 
+/** Switch to walk mode and walk to (x, z) cm. */
 function teleportTo(x: number, z: number, yawDeg?: number) {
   const s = useStore.getState()
   if (s.mode !== 'walk') s.setMode('walk')
   s.requestTeleport(Math.round(x), Math.round(z), yawDeg)
 }
 
+/** The plan drawn in cm: the SVG viewBox is the plan bounds, so SVG x/y = plan x/z. */
 function MapSvg({ width }: { width: number }) {
   const player = useStore((s) => s.player)
   const doorsOpen = useStore((s) => s.doorsOpen)
   const current = roomAt(planC, player.x, player.z)
   const yr = (player.yawDeg * Math.PI) / 180
   const cone = useMemo(() => {
-    const L = 130
-    const a = 32 * (Math.PI / 180)
+    const L = 130 // cone length, cm
+    const a = 32 * (Math.PI / 180) // half angle
+    // same yaw convention as the camera: forward = (-sin yaw, -cos yaw)
     const pt = (ang: number) => `${player.x - Math.sin(ang) * L},${player.z - Math.cos(ang) * L}`
     return `M${player.x},${player.z} L${pt(yr + a)} L${pt(yr - a)} Z`
   }, [player.x, player.z, yr])
@@ -147,6 +152,7 @@ function MapSvg({ width }: { width: number }) {
   )
 }
 
+/** Minimap panel; collapses to a "Map" button on phones. */
 export default function Minimap() {
   const small = useSmallScreen()
   const phone = useMedia('(max-width: 480px)')

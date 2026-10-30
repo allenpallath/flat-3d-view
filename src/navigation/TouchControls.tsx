@@ -1,4 +1,5 @@
-// OWNER: Navigation agent (A3). On-screen joystick (bottom-left) + look-pad (bottom-right) for touch devices.
+// On-screen joystick (bottom-left) + look-pad (bottom-right) for touch devices, walk mode only.
+// They write into `touchInput` (input.ts), which the walk controller reads every frame.
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { invalidate } from '@react-three/fiber'
@@ -21,6 +22,7 @@ const pad: React.CSSProperties = {
   zIndex: 20,
 }
 
+/** Drag the knob: offset from the pad centre / R = move input (-1..1). */
 function Joystick() {
   const [knob, setKnob] = useState({ x: 0, y: 0 })
   const origin = useRef<{ id: number; x: number; y: number } | null>(null)
@@ -51,8 +53,8 @@ function Joystick() {
         }
         setKnob({ x: dx, y: dy })
         touchInput.moveX = dx / R
-        invalidate()
         touchInput.moveY = -dy / R
+        invalidate()
       }}
       onPointerUp={end}
       onPointerCancel={end}
@@ -74,6 +76,7 @@ function Joystick() {
   )
 }
 
+/** Drag on the pad to look around (accumulated degrees, consumed by the next frame). */
 function LookPad() {
   const last = useRef<{ id: number; x: number; y: number } | null>(null)
   return (
@@ -88,8 +91,8 @@ function LookPad() {
         const l = last.current
         if (!l || l.id !== e.pointerId) return
         touchInput.lookYaw -= (e.clientX - l.x) * LOOK_SENS
-        invalidate()
         touchInput.lookPitch -= (e.clientY - l.y) * LOOK_SENS
+        invalidate()
         l.x = e.clientX
         l.y = e.clientY
       }}
@@ -101,6 +104,7 @@ function LookPad() {
   )
 }
 
+/** Shown on touch devices (or after the first touch) in walk mode. */
 export default function TouchControls() {
   const mode = useStore((s) => s.mode)
   const [touch, setTouch] = useState(isTouchDevice)

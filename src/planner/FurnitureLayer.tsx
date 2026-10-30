@@ -1,9 +1,14 @@
-// OWNER: Furniture Planner agent (A4). 3D layer: placed furniture, selection gizmo, wall distances, placement ghost.
+// 3D furniture layer: every placed item (shared merged geometry, distance LOD in walk mode) and, with
+// the furniture tool, selection (gizmo, outline, wall distances), the placement ghost, click-to-place
+// and keyboard shortcuts. Items are stored in plan cm; meshes are tagged {kind:'furniture', itemId}.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { invalidate, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Html, Line, TransformControls } from '@react-three/drei'
-import type { PlacedItem } from '../data/schema'
+import type { TransformControls as TransformControlsImpl } from 'three-stdlib'
+import { wrapDeg } from '../data/geometry'
+import { toCm, toM, type PlacedItem } from '../data/schema'
+import { isTypingTarget } from '../navigation/input'
 import { useStore } from '../store'
 import { getEntry, itemDims } from './catalog'
 import { useFurnitureGeometry } from './geoCache'
@@ -24,17 +29,19 @@ import {
 
 const D2R = Math.PI / 180
 const ACCENT = '#e0a64a'
+/** Placement snap step, cm. */
 const round5 = (v: number) => Math.round(v / 5) * 5
-const normDeg = (d: number) => {
-  let r = ((d % 360) + 360) % 360
-  if (r > 180) r -= 360
-  return Math.round(r)
-}
+/** Whole degrees in (-180, 180]. */
+const normDeg = (d: number) => Math.round(wrapDeg(d))
+/** In plan mode walls are cut at 120 cm (PLAN_CUT), so rays pass over them. */
+const rayWallCap = () => (useStore.getState().mode === 'plan' ? 120 : 9999)
+const noRaycast = () => null
 /** timestamp of the last furniture click (used by the deselect-on-empty-click logic) */
 const lastItemClick = { t: 0 }
 
 // ------------------------------------------------------------------ LOD
-// Beyond ~5 m (walk mode only) an item shows a low-detail proxy. Checked at most 5×/s, with hysteresis.
+// Beyond ~5 m (walk mode only) an item shows a low-detail proxy. Checked at most 5×/s, with hysteresis:
+// it switches to the proxy above LOD_FAR and back only below LOD_NEAR, so an item at ~5 m never flickers.
 const LOD_FAR = 5.5 // m: switch to the proxy above this (distance to the item's bounding circle)
 const LOD_NEAR = 4.5 // m: back to full detail below this
 const LOD_INTERVAL = 200 // ms
@@ -48,6 +55,7 @@ interface LodHandle {
 }
 const lodHandles = new Map<string, LodHandle>()
 
+/** Per-frame (throttled) LOD decision for every registered item. */
 function useLodManager() {
   const last = useRef(-1e9)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -74,9 +82,9 @@ function useLodManager() {
       let want = false
       if (walk && id !== s.selectedId) {
         const it = h.item
-        const dx = it.x / 100 - cam.x
-        const dy = it.y / 100 + h.hm - cam.y
-        const dz = it.z / 100 - cam.z
+        const dx = toM(it.x) - cam.x
+        const dy = toM(it.y) + h.hm - cam.y
+        const dz = toM(it.z) - cam.z
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) - h.r
         want = h.far ? dist > LOD_NEAR : dist > LOD_FAR
       }
@@ -91,6 +99,7 @@ function useLodManager() {
 }
 
 // ------------------------------------------------------------------ placed item
+/** One placed item: a single multi-material mesh, clickable with the furniture tool. */
 const Item = memo(function Item({
   item,
   selected,
@@ -147,8 +156,8 @@ const Item = memo(function Item({
     // ignore items hidden behind a wall (R3F only raycasts objects with handlers)
     const o = e.ray.origin
     const dir = e.ray.direction
-    const wall = rayPlan([o.x * 100, o.y * 100, o.z * 100], [dir.x, dir.y, dir.z], s.mode === 'plan' ? 120 : 9999)
-    if (wall && wall.kind === 'wall' && wall.t / 100 < e.distance - 0.08) return
+    const wall = rayPlan([toCm(o.x), toCm(o.y), toCm(o.z)], [dir.x, dir.y, dir.z], rayWallCap())
+    if (wall && wall.kind === 'wall' && toM(wall.t) < e.distance - 0.08) return
     e.stopPropagation()
     lastItemClick.t = performance.now()
     s.set({ selectedId: item.id })
@@ -157,7 +166,7 @@ const Item = memo(function Item({
   return (
     <group
       ref={ref}
-      position={[item.x / 100, item.y / 100, item.z / 100]}
+      position={[toM(item.x), toM(item.y), toM(item.z)]}
       rotation={[0, item.rot * D2R, 0]}
       matrixAutoUpdate={selected}
       onClick={onClick}
@@ -168,6 +177,7 @@ const Item = memo(function Item({
 })
 
 // ------------------------------------------------------------------ selection
+/** After a gizmo drag, put a wall-mounted item's back flat against the nearest wall face. */
 function snapWallItem(id: string) {
   const s = useStore.getState()
   const it = s.items.find((i) => i.id === id)
@@ -184,9 +194,12 @@ function snapWallItem(id: string) {
   s.updateItem(id, { x: Math.round(x), z: Math.round(z), rot: yawFromNormal(f.nx, f.nz) })
 }
 
+/** Event map of the gizmo; three-stdlib types it as a plain Object3D. */
+type GizmoEvents = THREE.EventDispatcher<{ 'dragging-changed': { value: boolean } }>
+
+/** TransformControls on the selected item; writes the dragged pose back to the store (cm, degrees). */
 function Gizmo({ item, object }: { item: PlacedItem; object: THREE.Object3D }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tc = useRef<any>(null)
+  const tc = useRef<TransformControlsImpl>(null)
   const mode = usePlanner((s) => s.gizmoMode)
   const [shift, setShift] = useState(false)
   const wallMounted = !!getEntry(item.catalogId)?.wallMounted
@@ -203,7 +216,7 @@ function Gizmo({ item, object }: { item: PlacedItem; object: THREE.Object3D }) {
   }, [])
 
   useEffect(() => {
-    const c = tc.current
+    const c = tc.current as unknown as GizmoEvents | null
     if (!c) return
     const cb = (e: { value: boolean }) => {
       window.__gizmoDragging = !!e.value
@@ -222,14 +235,15 @@ function Gizmo({ item, object }: { item: PlacedItem; object: THREE.Object3D }) {
 
   const onObjectChange = () => {
     const o = object
+    // the gizmo only rotates about y, so the quaternion is (0, sin(yaw/2), 0, cos(yaw/2))
     const q = o.quaternion
     const yaw = (2 * Math.atan2(q.y, q.w)) / D2R
     const cur = useStore.getState().items.find((i) => i.id === id)
     if (!cur) return
     useStore.getState().updateItem(id, {
-      x: Math.round(o.position.x * 100),
-      z: Math.round(o.position.z * 100),
-      y: wallMounted ? Math.max(0, Math.round(o.position.y * 100)) : cur.y,
+      x: Math.round(toCm(o.position.x)),
+      z: Math.round(toCm(o.position.z)),
+      y: wallMounted ? Math.max(0, Math.round(toCm(o.position.y))) : cur.y,
       rot: normDeg(yaw),
     })
   }
@@ -252,15 +266,21 @@ function Gizmo({ item, object }: { item: PlacedItem; object: THREE.Object3D }) {
   )
 }
 
+/** Outline box around the selected item: accent colour, red when it overlaps something. */
 function SelectionBox({ item }: { item: PlacedItem }) {
   const items = useStore((s) => s.items)
   const { w, d, h } = itemDims(item)
   const blocked = useMemo(() => collides(item.catalogId, item, { w, d, h }, items, item.id), [item, items, w, d, h])
-  const geo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(w / 100 + 0.03, Math.max(h, 1) / 100 + 0.03, d / 100 + 0.03)), [w, d, h])
+  const geo = useMemo(() => {
+    const box = new THREE.BoxGeometry(toM(w) + 0.03, toM(Math.max(h, 1)) + 0.03, toM(d) + 0.03)
+    const edges = new THREE.EdgesGeometry(box)
+    box.dispose()
+    return edges
+  }, [w, d, h])
   useEffect(() => () => geo.dispose(), [geo])
   return (
-    <group position={[item.x / 100, item.y / 100, item.z / 100]} rotation={[0, item.rot * D2R, 0]}>
-      <lineSegments geometry={geo} position={[0, Math.max(h, 1) / 200, 0]} renderOrder={999} raycast={() => null}>
+    <group position={[toM(item.x), toM(item.y), toM(item.z)]} rotation={[0, item.rot * D2R, 0]}>
+      <lineSegments geometry={geo} position={[0, toM(Math.max(h, 1)) / 2, 0]} renderOrder={999} raycast={noRaycast}>
         <lineBasicMaterial color={blocked ? '#ff4d4d' : ACCENT} depthTest={false} transparent />
       </lineSegments>
     </group>
@@ -279,21 +299,22 @@ const labelStyle: React.CSSProperties = {
   userSelect: 'none',
 }
 
+/** Dimension lines + labels from the selected item to the nearest wall on each side. */
 function WallDistances({ item }: { item: PlacedItem }) {
   const { h } = itemDims(item)
   const gaps = useMemo(() => wallGaps(item), [item])
-  const ly = Math.min(item.y + Math.max(h, 1) / 2, 110) / 100
+  const ly = toM(Math.min(item.y + Math.max(h, 1) / 2, 110)) // label height: item middle, at most 110 cm
   return (
     <group>
       {gaps
         .filter((g) => g.dist >= 0.5)
         .map((g) => {
-          const a: [number, number, number] = [g.a[0] / 100, ly, g.a[1] / 100]
-          const b: [number, number, number] = [g.b[0] / 100, ly, g.b[1] / 100]
+          const a: [number, number, number] = [toM(g.a[0]), ly, toM(g.a[1])]
+          const b: [number, number, number] = [toM(g.b[0]), ly, toM(g.b[1])]
           const mid: [number, number, number] = [(a[0] + b[0]) / 2, ly, (a[2] + b[2]) / 2]
           return (
             <group key={g.dir}>
-              <Line points={[a, b]} color={ACCENT} lineWidth={2} depthTest={false} renderOrder={998} raycast={() => null} />
+              <Line points={[a, b]} color={ACCENT} lineWidth={2} depthTest={false} renderOrder={998} raycast={noRaycast} />
               <Html position={mid} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
                 <div style={labelStyle}>{Math.round(g.dist)} cm</div>
               </Html>
@@ -310,6 +331,10 @@ const GREEN = new THREE.Color('#53c26b')
 const RED = new THREE.Color('#ff4d4d')
 const _normal = new THREE.Vector3()
 
+/**
+ * Placement ray cast: the nearest visible floor / wall mesh under `ndc` (tagged meshes are re-collected
+ * at most every 500 ms), falling back to the analytic plan ray when nothing is hit. Result in cm.
+ */
 function usePicker() {
   const { camera, scene, raycaster } = useThree()
   const tagged = useRef<{ list: THREE.Object3D[]; t: number }>({ list: [], t: -1e9 })
@@ -346,22 +371,27 @@ function usePicker() {
           }
           const horiz = Math.abs(nx) + Math.abs(nz) > 0.5
           return {
-            t: h.distance * 100,
-            x: h.point.x * 100,
-            y: h.point.y * 100,
-            z: h.point.z * 100,
+            t: toCm(h.distance),
+            x: toCm(h.point.x),
+            y: toCm(h.point.y),
+            z: toCm(h.point.z),
             nx,
             nz,
             kind: kind === 'wall' && horiz ? 'wall' : 'floor',
           }
         }
       }
-      return rayPlan([o.x * 100, o.y * 100, o.z * 100], [dir.x, dir.y, dir.z], useStore.getState().mode === 'plan' ? 120 : 9999)
+      return rayPlan([toCm(o.x), toCm(o.y), toCm(o.z)], [dir.x, dir.y, dir.z], rayWallCap())
     },
     [camera, scene, raycaster],
   )
 }
 
+/**
+ * Where a catalog item would be placed for a ray hit: wall-mounted items hang on the nearest wall face
+ * facing out of it; floor items pointed at a wall are put with their back to it; otherwise the hit
+ * point snapped to 5 cm with the ghost's rotation.
+ */
 function computePose(catalogId: string, hit: RayHit | null, ghostRot: number): Pose | null {
   const e = getEntry(catalogId)
   if (!e || !hit) return null
@@ -392,6 +422,7 @@ function computePose(catalogId: string, hit: RayHit | null, ghostRot: number): P
   return { x: round5(hit.x), z: round5(hit.z), y, rot: ghostRot }
 }
 
+/** Translucent preview of the item being placed; green when it fits, red when it overlaps. */
 function Ghost({ catalogId }: { catalogId: string }) {
   const e = getEntry(catalogId)
   const ref = useRef<THREE.Group>(null)
@@ -399,6 +430,8 @@ function Ghost({ catalogId }: { catalogId: string }) {
   const gl = useThree((st) => st.gl)
   const ndc = useMemo(() => new THREE.Vector2(), [])
   const blockedRef = useRef(false)
+  // inputs of the last pose computation; the ray cast + collision test are skipped while all are unchanged
+  const last = useMemo(() => ({ x: NaN, y: NaN, cam: new THREE.Matrix4(), items: null as unknown, rot: NaN }), [])
   const entry = useFurnitureGeometry({ catalogId, w: e?.w ?? 1, d: e?.d ?? 1, h: e?.h ?? 1 }, false)
   useEffect(() => {
     ghostMat.color.copy(GREEN)
@@ -421,15 +454,24 @@ function Ghost({ catalogId }: { catalogId: string }) {
     if (!g || !e) return
     if (document.pointerLockElement) ndc.set(0, 0)
     else ndc.copy(state.pointer)
-    const pose = computePose(catalogId, pick(ndc), usePlanner.getState().ghostRot)
+    const items = useStore.getState().items
+    const rot = usePlanner.getState().ghostRot
+    const cam = state.camera.matrixWorld
+    if (ndc.x === last.x && ndc.y === last.y && rot === last.rot && items === last.items && last.cam.equals(cam)) return
+    last.x = ndc.x
+    last.y = ndc.y
+    last.rot = rot
+    last.items = items
+    last.cam.copy(cam)
+    const pose = computePose(catalogId, pick(ndc), rot)
     if (!pose) {
       g.visible = false
       return
     }
     g.visible = true
-    g.position.set(pose.x / 100, pose.y / 100, pose.z / 100)
+    g.position.set(toM(pose.x), toM(pose.y), toM(pose.z))
     g.rotation.set(0, pose.rot * D2R, 0)
-    const blocked = collides(catalogId, pose, e, useStore.getState().items)
+    const blocked = collides(catalogId, pose, e, items)
     if (blocked !== blockedRef.current) {
       blockedRef.current = blocked
       ghostMat.color.copy(blocked ? RED : GREEN)
@@ -444,14 +486,18 @@ function Ghost({ catalogId }: { catalogId: string }) {
     </group>
   )
 }
-const noRaycast = () => {}
 
 // ------------------------------------------------------------------ input: tap to place / deselect, keyboard
+/**
+ * Canvas input for the furniture tool: a click (pointer moved <= 5 px) places the pending item or,
+ * on empty space, deselects; plus keyboard shortcuts (R, G, Del, Esc, Alt+arrows).
+ */
 function useCanvasInput() {
   const { gl } = useThree()
   const pick = usePicker()
   useEffect(() => {
     const el = gl.domElement
+    const ndc = new THREE.Vector2()
     let down: { x: number; y: number; acc: number } | null = null
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return
@@ -470,9 +516,8 @@ function useCanvasInput() {
       if (s.tool !== 'furniture') return
       if (s.pendingCatalogId) {
         const r = el.getBoundingClientRect()
-        const ndc = document.pointerLockElement
-          ? new THREE.Vector2(0, 0)
-          : new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+        if (document.pointerLockElement) ndc.set(0, 0)
+        else ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
         const pose = computePose(s.pendingCatalogId, pick(ndc), usePlanner.getState().ghostRot)
         if (!pose) return
         clickGuard.until = performance.now() + 300
@@ -503,8 +548,7 @@ function useCanvasInput() {
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState()
       if (s.tool !== 'furniture' || e.ctrlKey || e.metaKey) return
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      if (isTypingTarget(e.target)) return
       const k = e.key
       if (s.pendingCatalogId) {
         if (k === 'Escape') s.set({ pendingCatalogId: null })
@@ -541,6 +585,7 @@ function useCanvasInput() {
 }
 
 // ------------------------------------------------------------------ layer
+/** All placed furniture plus the furniture tool's 3D helpers. Seeds the drawing's layout on first run. */
 export default function FurnitureLayer() {
   const items = useStore((s) => s.items)
   const tool = useStore((s) => s.tool)

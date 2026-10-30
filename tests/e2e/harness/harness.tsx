@@ -1,5 +1,5 @@
-// OWNER: A6. Isolated harness for the UI modules (Toolbar, HUD, MeasureTool, PlanOverlay) that does not
-// depend on other agents' modules: plain boxes for walls/floors + a minimal orbit/walk camera.
+// Isolated harness for the UI modules (Toolbar, HUD, MeasureTool, PlanOverlay) that does not
+// depend on the rest of the app: plain boxes for walls/floors + a minimal orbit/walk camera.
 // Open http://localhost:5186/tests/e2e/harness/index.html
 import { createRoot } from 'react-dom/client'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'

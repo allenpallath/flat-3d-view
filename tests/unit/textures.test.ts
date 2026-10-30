@@ -1,4 +1,4 @@
-// QA (A6): procedural texture resolution tiers (phones / low quality use half-size sets).
+// Procedural texture resolution tiers (phones / low quality use half-size sets).
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildRaw, setTextureScale } from '../../src/materials/textures'
 import { GENERATORS } from '../../src/materials/generators'

@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). Perf stats published by <PerfProbe/> (in-canvas) and shown by <PerfHUD/>.
+// Perf stats published by <PerfProbe/> (in-canvas) and shown by <PerfHUD/>.
 // Enabled with the `?perf` URL flag. Updated at ~2 Hz, never per frame.
 import { create } from 'zustand'
 
@@ -17,6 +17,7 @@ export interface PerfStats {
   heapMB: number | null
 }
 
+/** Latest published perf stats. */
 export const usePerf = create<PerfStats>()(() => ({
   fps: 0,
   calls: 0,
@@ -30,6 +31,7 @@ export const usePerf = create<PerfStats>()(() => ({
 /** performance.now() of the last frame the probe saw (mutable, read by the HUD's idle check). */
 export const perfClock = { lastFrame: 0 }
 
+/** Used JS heap in MB, or null outside Chromium. */
 export function heapMB(): number | null {
   const m = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory
   return m ? m.usedJSHeapSize / 1048576 : null

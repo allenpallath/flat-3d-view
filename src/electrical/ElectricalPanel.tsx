@@ -1,4 +1,5 @@
-// OWNER: Electrical Planner agent (A5). DOM side panel shown when tool === 'electrical'.
+// DOM side panel (left) for the electrical tool: point palette with heights, inspector for the selected
+// point (height, corner distance, TV planner), suggested set, CSV / JSON export and import, list by room.
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { newId, useStore } from '../store'
 import planC from '../data/planC'
@@ -7,7 +8,7 @@ import { POINT_TYPES, PRESETS, TV_SIZES, tvSizeCm, tvViewingRange } from './pres
 import { plateDataUrl } from './plateTexture'
 import { suggestedPoints } from './suggested'
 import { countByType, parsePointsJson, pointsToCsv, pointsToJson } from './exportCsv'
-import { alongInfo, ceilingInfo, isCeilingPoint, overlappingOpening, roomForPoint, setLeftDistance, sideLabel, viewpointFor, wallSide } from './wallMath'
+import { alongInfo, ceilingInfo, depthInFront, isCeilingPoint, overlappingOpening, roomForPoint, setLeftDistance, sideLabel, viewpointFor, wallSide } from './wallMath'
 import { tvPlanFor, useElecUi } from './uiStore'
 
 const ACCENT = '#e0a64a'
@@ -62,6 +63,7 @@ const S = {
 const active = (on: boolean): CSSProperties =>
   on ? { ...S.btn, background: 'rgba(224,166,74,0.25)', borderColor: ACCENT } : S.btn
 
+/** Save text as a file via a temporary object URL. */
 function download(name: string, text: string, mime: string) {
   const url = URL.createObjectURL(new Blob([text], { type: mime }))
   const a = document.createElement('a')
@@ -91,6 +93,7 @@ function Thumb({ type, size = 30 }: { type: PointType; size?: number }) {
   )
 }
 
+/** Number input with a draft while typing; commits clamped on blur / Enter. */
 function NumField({ value, onChange, min, max, step = 1, suffix = 'cm' }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; suffix?: string }) {
   const [draft, setDraft] = useState<string | null>(null)
   const commit = () => {
@@ -133,6 +136,7 @@ function Section({ title, children, right }: { title: string; children: ReactNod
   )
 }
 
+/** Editor for the selected point. */
 function Inspector({ p }: { p: ElectricalPoint }) {
   const updatePoint = useStore((s) => s.updatePoint)
   const removePoint = useStore((s) => s.removePoint)
@@ -262,15 +266,11 @@ function Inspector({ p }: { p: ElectricalPoint }) {
   )
 }
 
+/** Text advice for a TV point: panel size, viewing distance and whether it suits the room depth. */
 function TvAdvice({ inches, centre, p }: { inches: number; centre: number; p: ElectricalPoint }) {
   const { w, h } = tvSizeCm(inches)
   const r = tvViewingRange(inches)
-  const room = roomForPoint(planC, p)
-  let depth: number | null = null
-  if (room) {
-    const rc = room.rect
-    depth = p.nx > 0 ? rc.x2 - p.x : p.nx < 0 ? p.x - rc.x1 : p.nz > 0 ? rc.z2 - p.z : p.z - rc.z1
-  }
+  const depth = depthInFront(planC, p)
   // eyes of someone on a sofa against the opposite wall sit ~65 cm from that wall
   const seat = depth !== null ? Math.round(depth - 65) : null
   const fits = seat !== null ? (seat < r.min ? 'too close — pick a smaller TV' : seat > r.max ? 'a bigger TV would suit' : 'good fit') : null
@@ -291,6 +291,7 @@ function TvAdvice({ inches, centre, p }: { inches: number; centre: number; p: El
   )
 }
 
+/** Select a point and walk to a spot in its room that looks at it. */
 function goTo(p: ElectricalPoint) {
   const s = useStore.getState()
   const v = viewpointFor(planC, p, isCeilingPoint(p) ? 0 : 170, s.player?.yawDeg ?? 0)
@@ -298,6 +299,7 @@ function goTo(p: ElectricalPoint) {
   s.requestTeleport(v.x, v.z, v.yawDeg)
 }
 
+/** The electrical panel; rendered only while the electrical tool is active. */
 export default function ElectricalPanel() {
   const tool = useStore((s) => s.tool)
   const points = useStore((s) => s.points)

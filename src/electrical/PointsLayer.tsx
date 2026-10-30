@@ -1,5 +1,5 @@
-// OWNER: Electrical Planner agent (A5). 3D layer: renders electrical points as modular plates,
-// handles placement / selection when tool === 'electrical', dimension guides and the TV-size preview.
+// 3D layer for electrical points: every point as a modular plate (tagged {kind:'point', pointId}) and,
+// with the electrical tool, click-to-place / select / delete, dimension guides and the TV-size preview.
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useThree } from '@react-three/fiber'
 import { Html, Line } from '@react-three/drei'
@@ -7,10 +7,11 @@ import * as THREE from 'three'
 import { useStore } from '../store'
 import planC from '../data/planC'
 import { roomAt } from '../data/geometry'
-import { toM, type ElectricalPoint, type PointType } from '../data/schema'
+import { toCm, toM, type ElectricalPoint, type PointType } from '../data/schema'
+import { isTypingTarget } from '../navigation/input'
 import { PRESETS, tvSizeCm, tvViewingRange } from './presets'
 import { plateTexture } from './plateTexture'
-import { alongInfo, ceilingInfo, findWallFace, isCeilingPoint, roomForPoint, snap } from './wallMath'
+import { alongInfo, ceilingInfo, depthInFront, findWallFace, isCeilingPoint, snap } from './wallMath'
 import { tvPlanFor, useElecUi } from './uiStore'
 
 type NewPoint = Omit<ElectricalPoint, 'id'>
@@ -49,6 +50,7 @@ function pointTransform(p: Pick<ElectricalPoint, 'x' | 'y' | 'z' | 'nx' | 'nz'>)
   return { position, rotation }
 }
 
+/** One plate: rect plates are a box + printed face, round ones a disc (+ hook for fan points). */
 function Plate({ p, ghost, selected, outline }: { p: NewPoint & { id?: string }; ghost?: boolean; selected?: boolean; outline?: boolean }) {
   const pre = PRESETS[p.type]
   const { position, rotation } = pointTransform(p)
@@ -186,16 +188,8 @@ function TvPreview({ p }: { p: ElectricalPoint }) {
   if (!plan.show || isCeilingPoint(p)) return null
   const { w, h } = tvSizeCm(plan.inches)
   const range = tvViewingRange(plan.inches)
-  const room = roomForPoint(planC, p)
   // available depth in front of the wall inside the room
-  let depth = Infinity
-  if (room) {
-    const r = room.rect
-    if (p.nx > 0) depth = r.x2 - p.x
-    if (p.nx < 0) depth = p.x - r.x1
-    if (p.nz > 0) depth = r.z2 - p.z
-    if (p.nz < 0) depth = p.z - r.z1
-  }
+  const depth = depthInFront(planC, p) ?? Infinity
   const d0 = Math.min(range.min, depth)
   const d1 = Math.min(range.max, depth)
   const yaw = Math.atan2(p.nx, p.nz)
@@ -252,6 +246,7 @@ type PickResult =
 
 const PASS_THROUGH = new Set(['furniture', 'fixture'])
 
+/** First tagged, visible hit under the ray, looking through furniture and fixtures. */
 function pickAt(raycaster: THREE.Raycaster, scene: THREE.Scene): PickResult {
   const hits = raycaster.intersectObjects(scene.children, true)
   for (const h of hits) {
@@ -266,11 +261,16 @@ function pickAt(raycaster: THREE.Raycaster, scene: THREE.Scene): PickResult {
 
 const _n = new THREE.Vector3()
 
+/**
+ * The point that a click / hover would place. Wall hits snap the normal to the nearest axis, the height
+ * to the preset (or cursor with Shift) and the along-wall position to 5 cm. Ceiling / floor hits
+ * place on the ceiling, snapping to the room centre within 25 cm.
+ */
 function candidateFrom(pick: PickResult, type: PointType, shift: boolean, heightOverride: number | null): NewPoint | null {
   if (!pick || pick.kind !== 'surface') return null
   const pre = PRESETS[type]
   const { hit, surface } = pick
-  const P = hit.point.clone().multiplyScalar(100)
+  const P = { x: toCm(hit.point.x), y: toCm(hit.point.y), z: toCm(hit.point.z) }
   if (surface === 'wall') {
     if (pre.mount === 'ceiling' || !hit.face) return null
     _n.copy(hit.face.normal).transformDirection(hit.object.matrixWorld)
@@ -308,6 +308,14 @@ function candidateFrom(pick: PickResult, type: PointType, shift: boolean, height
   return { type, x, y, z, nx: 0, nz: 0, ...(room ? { roomId: room.id } : {}) }
 }
 
+/** Same placement candidate (type, position, normal), so the ghost need not re-render. */
+function samePoint(a: NewPoint | null, b: NewPoint | null) {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.type === b.type && a.x === b.x && a.y === b.y && a.z === b.z && a.nx === b.nx && a.nz === b.nz && a.wallId === b.wallId
+}
+
+/** All electrical points plus the electrical tool's interaction. */
 export default function PointsLayer() {
   const points = useStore((s) => s.points)
   const tool = useStore((s) => s.tool)
@@ -349,7 +357,7 @@ export default function PointsLayer() {
       if (!type) return
       if (e.pointerType !== 'mouse' && !document.pointerLockElement) return
       const c = candidateFrom(cast(e), type, e.shiftKey, useElecUi.getState().heightOverride)
-      setGhost((g) => (c === null && g === null ? g : c))
+      setGhost((g) => (samePoint(g, c) ? g : c)) // re-render only when the ghost actually moves
     }
     const onDown = (e: PointerEvent) => {
       if (e.button === 0) down = { x: e.clientX, y: e.clientY, id: e.pointerId }
@@ -393,8 +401,7 @@ export default function PointsLayer() {
   useEffect(() => {
     if (!editing) return
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      if (isTypingTarget(e.target)) return
       const s = useStore.getState()
       if (e.key === 'Escape') {
         if (s.pendingPointType) s.set({ pendingPointType: null })

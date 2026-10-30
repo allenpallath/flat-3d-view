@@ -1,5 +1,4 @@
-// OWNER: Materials & Lighting agent (A2).
-// Web Worker: generates procedural texture sets off the main thread and transfers the buffers back.
+// Web Worker (started by materials.ts): generates procedural texture sets off the main thread and transfers the buffers back.
 import { GENERATORS, type TexSetName } from './generators'
 import { setTextureScale } from './textures'
 

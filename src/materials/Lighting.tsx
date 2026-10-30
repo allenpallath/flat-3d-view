@@ -1,4 +1,3 @@
-// OWNER: Materials & Lighting agent (A2).
 // Daylight interior lighting: sky, soft-shadowed sun fitted to the flat, interior IBL built from
 // Lightformers (no files), hemisphere fill, warm ceiling downlights per room, renderer setup.
 import { useEffect, useMemo } from 'react'
@@ -16,13 +15,15 @@ import { markShadowsDirty, shadowsDirty } from './shadows'
 /** Sun: azimuth measured from north (-z) toward east (+x), degrees; elevation above horizon. */
 const SUN_AZIMUTH = -28
 const SUN_ELEVATION = 38
-export const SUN_DIR = (() => {
+const SUN_DIR = (() => {
   const az = THREE.MathUtils.degToRad(SUN_AZIMUTH)
   const el = THREE.MathUtils.degToRad(SUN_ELEVATION)
   return new THREE.Vector3(Math.cos(el) * Math.sin(az), Math.sin(el), -Math.cos(el) * Math.cos(az)).normalize()
 })()
 
 const EXPOSURE = 1.15
+/** Interior IBL cube-map size (px). Fixed: changing it per quality leaked the old render targets. */
+const ENV_RESOLUTION = 256
 const noRaycast = () => null
 
 interface CeilingLight {
@@ -52,6 +53,7 @@ function ceilingLights(): CeilingLight[] {
   return out
 }
 
+/** A warm spot light under the ceiling (+ the visible disc of the fitting in walk mode). */
 function Downlight({ l, showFixture, quality }: { l: CeilingLight; showFixture: boolean; quality: 'low' | 'high' }) {
   const ceil = toM(planC.ceilingHeight)
   const target = useMemo(() => {
@@ -82,6 +84,7 @@ function Downlight({ l, showFixture, quality }: { l: CeilingLight; showFixture: 
   )
 }
 
+/** Renderer setup and every light; also owns the static-shadow update loop (see shadows.ts). */
 export default function Lighting() {
   const quality = useStore((s) => s.quality)
   const mode = useStore((s) => s.mode)
@@ -105,7 +108,7 @@ export default function Lighting() {
   useEffect(() => {
     applyQuality(quality)
     markShadowsDirty()
-  }, [quality, gl])
+  }, [quality])
 
   // anything that changes what casts shadows: furniture, doors swinging, cut-away walls in plan view
   useEffect(() => {
@@ -116,6 +119,8 @@ export default function Lighting() {
     })
   }, [])
 
+  // gl.shadowMap.autoUpdate is off: re-render the shadow map only inside a dirty window.
+  // Priority -1 runs this before the main render of the same frame.
   useFrame((state) => {
     if (shadowsDirty()) {
       gl.shadowMap.needsUpdate = true
@@ -174,7 +179,7 @@ export default function Lighting() {
 
       {/* Interior image-based lighting: a warm room with bright windows and ceiling lights.
           Gives believable reflections on polished tiles, glass, metal and lacquer. */}
-      <Environment resolution={high ? 256 : 128} frames={1} background={false} environmentIntensity={0.55}>
+      <Environment resolution={ENV_RESOLUTION} frames={1} background={false} environmentIntensity={0.55}>
         <color attach="background" args={['#8a8278']} />
         {/* ceiling (bounced light) and floor */}
         <Lightformer form="rect" intensity={1.1} color="#fff8ee" position={[0, 6, 0]} scale={[12, 12, 1]} />

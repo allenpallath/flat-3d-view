@@ -1,5 +1,7 @@
-// OWNER: Furniture Planner agent (A4). DOM side panel: catalog, inspector, layout actions.
+// DOM side panel (left) for the furniture tool: searchable catalog, inspector for the selected item
+// (size, position, rotation, colour, TV size) and whole-layout actions.
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { wrapDeg } from '../data/geometry'
 import type { CatalogItem, PlacedItem } from '../data/schema'
 import { useStore } from '../store'
 import { CATALOG, CATEGORY_LABELS, TV_SIZES, getEntry, itemDims } from './catalog'
@@ -58,6 +60,7 @@ const S = {
 const accentBtn: CSSProperties = { ...S.btn, background: ACCENT, color: '#1a1a1a', border: 'none', fontWeight: 600 }
 const fmt = (n: number) => String(Math.round(n * 10) / 10)
 
+/** Number input that commits on blur / Enter and reverts invalid text. */
 function NumField({ label, value, onCommit, min = 0, step = 1, disabled }: { label: string; value: number; onCommit: (v: number) => void; min?: number; step?: number; disabled?: boolean }) {
   const [txt, setTxt] = useState(fmt(value))
   useEffect(() => setTxt(fmt(value)), [value])
@@ -90,6 +93,7 @@ function NumField({ label, value, onCommit, min = 0, step = 1, disabled }: { lab
   )
 }
 
+/** Editor for the selected item. */
 function Inspector({ item }: { item: PlacedItem }) {
   const updateItem = useStore((s) => s.updateItem)
   const removeItem = useStore((s) => s.removeItem)
@@ -140,13 +144,13 @@ function Inspector({ item }: { item: PlacedItem }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 6, alignItems: 'end' }}>
         <NumField label="X cm" value={item.x} min={-1000} onCommit={(v) => up({ x: v })} />
         <NumField label="Z cm" value={item.z} min={-1000} onCommit={(v) => up({ z: v })} />
-        <NumField label="Rot °" value={item.rot} min={-720} step={15} onCommit={(v) => up({ rot: ((((v + 180) % 360) + 360) % 360) - 180 })} />
+        <NumField label="Rot °" value={item.rot} min={-720} step={15} onCommit={(v) => up({ rot: wrapDeg(v) })} />
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-        <button style={S.btn} title="Rotate −90° (Shift+R)" onClick={() => up({ rot: norm(item.rot - 90) })}>
+        <button style={S.btn} title="Rotate −90° (Shift+R)" onClick={() => up({ rot: wrapDeg(item.rot - 90) })}>
           ⟳ −90°
         </button>
-        <button style={S.btn} title="Rotate +90° (R)" onClick={() => up({ rot: norm(item.rot + 90) })}>
+        <button style={S.btn} title="Rotate +90° (R)" onClick={() => up({ rot: wrapDeg(item.rot + 90) })}>
           ⟲ +90°
         </button>
         <div style={{ display: 'flex', marginLeft: 'auto', borderRadius: 7, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.14)' }} title="Gizmo mode (G)">
@@ -203,12 +207,7 @@ function Inspector({ item }: { item: PlacedItem }) {
   )
 }
 
-const norm = (d: number) => {
-  let r = ((d % 360) + 360) % 360
-  if (r > 180) r -= 360
-  return r
-}
-
+/** Collapsible catalog category. */
 function Group({ title, children, open, onToggle }: { title: string; children: ReactNode; open: boolean; onToggle: () => void }) {
   return (
     <div style={{ marginTop: 6 }}>
@@ -221,6 +220,7 @@ function Group({ title, children, open, onToggle }: { title: string; children: R
   )
 }
 
+/** The furniture panel; rendered only while the furniture tool is active. */
 export default function CatalogPanel() {
   const tool = useStore((s) => s.tool)
   const items = useStore((s) => s.items)

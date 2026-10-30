@@ -1,4 +1,4 @@
-// Cross-module QA tests (A6) for pure helpers written by other agents.
+// Cross-module tests for pure helpers: walker collision, electrical export, project file format.
 import { describe, expect, it } from 'vitest'
 import planC from '../../src/data/planC'
 import { planBounds } from '../../src/data/geometry'

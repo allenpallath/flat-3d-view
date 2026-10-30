@@ -23,6 +23,7 @@ interface ElecUi {
   setTv: (pointId: string, p: Partial<TvPlan>) => void
 }
 
+/** Electrical UI store; only the TV preview settings are persisted. */
 export const useElecUi = create<ElecUi>()(
   persist(
     (set) => ({

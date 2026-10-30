@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). 3D layer: the original drawing laid on the floor as a scale check.
+// 3D layer: the original drawing laid on the floor as a scale check.
 import { Suspense, useLayoutEffect } from 'react'
 import * as THREE from 'three'
 import { useTexture } from '@react-three/drei'
@@ -48,6 +48,7 @@ function OverlayPlane() {
   )
 }
 
+/** The drawing on the floor while the Overlay toggle is on. */
 export default function PlanOverlay() {
   const overlay = useStore((s) => s.overlay)
   if (!overlay) return null

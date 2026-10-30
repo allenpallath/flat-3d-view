@@ -66,12 +66,12 @@ Confirm the real wall thicknesses, door positions and ceiling height with the bu
 
 | Folder | Module |
 |---|---|
-| `src/data/` | Plan data, shared types, geometry helpers |
+| `src/data/` | Plan data, shared types, geometry helpers (walls, doors, colliders, angles), room visibility, TV sizing |
 | `src/architecture/` | Walls, floors, doors/windows, ceilings, kitchen and toilet fittings |
 | `src/materials/` | Procedural PBR textures, lighting, surroundings, post-processing |
-| `src/navigation/` | Walking, collision, dollhouse and plan cameras, minimap, touch controls |
+| `src/navigation/` | Walking, collision, dollhouse and plan cameras, minimap, touch controls, room culling |
 | `src/planner/` | Furniture catalog, models, placement, default layout |
 | `src/electrical/` | Electrical points, suggested set, CSV/JSON export |
-| `src/ui/` | Toolbar, HUD, measure tool, plan overlay |
+| `src/ui/` | Toolbar, HUD, measure tool, plan overlay, `?perf` overlay |
 
-The team brief and module ownership are in `docs/AGENTS.md`.
+The conventions (units, axes, yaw, mesh tags, dev hooks) are in `docs/AGENTS.md`.

@@ -1,4 +1,3 @@
-// OWNER: Architecture agent (A1).
 // Small geometry builder: accumulates axis-aligned boxes (given in cm) into one
 // BufferGeometry per mesh, with one draw group per material and world-planar UVs
 // in metres (UV 1 = 1 m), so tiled textures line up across pieces at real size.
@@ -23,7 +22,7 @@ export interface Built {
   materials: THREE.Material[]
 }
 
-const M = 0.01
+const M = 0.01 // cm -> m
 
 export class GeoBuilder {
   private slots = new Map<THREE.Material, Slot>()
@@ -52,6 +51,7 @@ export class GeoBuilder {
     for (const p of pts) {
       s.p.push(p[0], p[1], p[2])
       s.n.push(normal[0], normal[1], normal[2])
+      // world-planar UVs in metres, mirrored on the negative faces so textures read the right way round
       if (ax === 0) s.uv.push(normal[0] > 0 ? -p[2] : p[2], p[1])
       else if (ax === 1) s.uv.push(p[0], normal[1] > 0 ? -p[2] : p[2])
       else s.uv.push(normal[2] > 0 ? p[0] : -p[0], p[1])
@@ -83,6 +83,7 @@ export class GeoBuilder {
     }
   }
 
+  /** Same as box() for a Box value. */
   b(box: Box, mat: MatSpec) {
     this.box(box.min, box.max, mat)
   }

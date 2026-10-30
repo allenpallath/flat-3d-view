@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6).
+// Memory leak regression test.
 // `npm run e2e`: starts its own Vite dev server on port 5186, opens the app in headless Chromium,
 // captures one screenshot per room (via the __store teleport hook) plus dollhouse and plan views
 // with the floor-plan overlay on, writes them to screenshots/, and exits 1 on page/console errors.

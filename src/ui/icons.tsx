@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). Tiny inline SVG icon set (stroke icons, 24x24 viewBox).
+// Tiny inline SVG icon set (stroke icons, 24x24 viewBox).
 import type { ReactNode } from 'react'
 
 const S = ({ children }: { children: ReactNode }) => (

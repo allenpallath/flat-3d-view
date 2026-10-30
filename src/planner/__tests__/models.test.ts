@@ -1,3 +1,4 @@
+// Every catalog model builds one merged geometry (and LOD proxy) that fits its footprint.
 import { describe, expect, it } from 'vitest'
 import { CATALOG } from '../catalog'
 import { buildFurniture } from '../models'

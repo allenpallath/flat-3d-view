@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). Local state for the measure tool (not persisted).
+// Local state for the measure tool (not persisted).
 import { create } from 'zustand'
 import type { Vec3 } from './format'
 
@@ -19,6 +19,7 @@ interface MeasureState {
 }
 
 let nextId = 1
+/** Measure-tool store. */
 export const useMeasure = create<MeasureState>()((set) => ({
   list: [],
   start: null,

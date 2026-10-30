@@ -1,4 +1,6 @@
-// OWNER: Electrical Planner agent (A5). Pure helpers (no three / DOM) so they can be unit tested.
+// Pure wall maths for electrical points (cm, no three / DOM, unit-tested). A wall point stores the
+// outward normal (nx, nz) of the wall face it sits on, i.e. pointing into its room; a ceiling point
+// has a zero normal. From that we find the room, the wall, the corner distances and clashes.
 import type { ElectricalPoint, Opening, Plan, Rect, Room, Wall } from '../data/schema'
 import { roomAt } from '../data/geometry'
 import { PRESETS } from './presets'
@@ -17,6 +19,7 @@ export function wallSide(nx: number, nz: number): Side | null {
   return nz > 0 ? 'north' : 'south'
 }
 
+/** "North wall" etc., or "Ceiling". */
 export const sideLabel = (s: Side | null) => (s ? s[0].toUpperCase() + s.slice(1) + ' wall' : 'Ceiling')
 
 /** Room a point belongs to: probe 5 cm into the room along the normal. */
@@ -79,6 +82,7 @@ export function faceSpan(plan: Plan, p: P): [number, number] | null {
   return s
 }
 
+/** Distances of a wall point to the two corners of its wall face, as seen facing the wall. */
 export function alongInfo(plan: Plan, p: P): AlongInfo | null {
   if (isCeilingPoint(p)) return null
   const s = faceSpan(plan, p)
@@ -126,6 +130,20 @@ export function ceilingInfo(plan: Plan, p: P) {
   return { west: p.x - r.x1, east: r.x2 - p.x, north: p.z - r.z1, south: r.z2 - p.z, room }
 }
 
+/**
+ * Clear depth (cm) in front of a wall point: from the wall face across the room to the opposite side,
+ * along the normal. null when the point is not in a room.
+ */
+export function depthInFront(plan: Plan, p: P): number | null {
+  const room = roomForPoint(plan, p)
+  if (!room) return null
+  const r = room.rect
+  if (p.nx > 0) return r.x2 - p.x
+  if (p.nx < 0) return p.x - r.x1
+  if (p.nz > 0) return r.z2 - p.z
+  return p.z - r.z1
+}
+
 /** Opening on the point's wall that the plate overlaps (door, window...), if any. */
 export function overlappingOpening(plan: Plan, p: P): Opening | undefined {
   if (isCeilingPoint(p)) return undefined
@@ -161,4 +179,5 @@ export function viewpointFor(plan: Plan, p: P, standOff = 160, currentYaw = 0) {
   return { x: Math.round(x), z: Math.round(z), yawDeg: Math.round(yawDeg) }
 }
 
+/** Round to the nearest multiple of `step`. */
 export const snap = (v: number, step: number) => Math.round(v / step) * step

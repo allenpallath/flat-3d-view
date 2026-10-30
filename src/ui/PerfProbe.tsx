@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). In-canvas perf probe (renders nothing). Mount inside <Canvas>; it is a
+// In-canvas perf probe (renders nothing). Mount inside <Canvas>; it is a
 // no-op unless the URL has `?perf`. Publishes renderer.info to usePerf and exposes window.__perf.
 import { useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'

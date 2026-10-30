@@ -6,6 +6,7 @@ import type { Box, Fixture, Opening, Plan, Rect, Wall } from './schema'
 export const rectW = (r: Rect) => r.x2 - r.x1
 /** Depth (z extent) of a rect. */
 export const rectD = (r: Rect) => r.z2 - r.z1
+/** Centre point of a rect. */
 export const rectCenter = (r: Rect) => ({ x: (r.x1 + r.x2) / 2, z: (r.z1 + r.z2) / 2 })
 /** True if two rects overlap with positive area (touching edges do not count). */
 export const rectsOverlap = (a: Rect, b: Rect) => a.x1 < b.x2 && a.x2 > b.x1 && a.z1 < b.z2 && a.z2 > b.z1

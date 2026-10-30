@@ -1,3 +1,4 @@
+// Electrical planner unit tests: suggested set, wall maths, CSV / JSON round trips, TV sizing.
 import { describe, expect, it } from 'vitest'
 import planC from '../../data/planC'
 import type { ElectricalPoint } from '../../data/schema'

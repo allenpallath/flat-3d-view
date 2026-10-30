@@ -1,4 +1,3 @@
-// OWNER: Materials & Lighting agent (A2).
 // Procedural PBR texture generation (no downloads). Everything is generated into
 // raw RGBA buffers from tileable gradient noise, so it also works without a DOM.
 // Convention: geometry UV 1.0 = 1 metre, so each texture set gets
@@ -78,11 +77,14 @@ export class Noise {
 
 // ---------------------------------------------------------------- helpers
 export const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
+/** Linear interpolation. */
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+/** GLSL-style smoothstep. */
 export const smooth = (e0: number, e1: number, x: number) => {
   const t = clamp01((x - e0) / (e1 - e0))
   return t * t * (3 - 2 * t)
 }
+/** '#rrggbb' -> [r, g, b] in 0..1. */
 export function hex(c: string): [number, number, number] {
   const n = parseInt(c.replace('#', ''), 16)
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
@@ -124,9 +126,11 @@ export interface BuildOpts {
 // Resolution multiplier applied to every generator's `w`/`h` (1 = full, 0.5 = phones / low quality).
 // Generators work in u,v space, so the pattern is resolution independent.
 let texScale = 1
+/** Set the resolution multiplier for the following buildRaw() calls. */
 export function setTextureScale(s: number) {
   texScale = s
 }
+/** Current resolution multiplier. */
 export const getTextureScale = () => texScale
 
 /** Run a pixel generator and return raw RGBA colour / roughness / normal buffers. */

@@ -1,4 +1,5 @@
-// OWNER: UI & QA agent (A6). Pure helpers (no three/react imports) so they are unit-testable.
+// Pure UI helpers (no three/react imports, unit-tested): measure formatting and snapping, the drawing
+// overlay extent, the Save/Load project file format and e2e room viewpoints.
 
 export type Vec3 = [number, number, number]
 
@@ -95,6 +96,7 @@ export interface ProjectFile<I = unknown, P = unknown> {
   points: P[]
 }
 
+/** A project file (Save) for the given items and points. */
 export function makeProject<I, P>(items: I[], points: P[]): ProjectFile<I, P> {
   return { version: PROJECT_VERSION, app: 'flat-3d-view', savedAt: new Date().toISOString(), items, points }
 }

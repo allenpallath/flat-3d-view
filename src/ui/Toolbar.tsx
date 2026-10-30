@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). DOM overlay: top-centre toolbar.
+// DOM overlay: top-centre toolbar.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../store'
 import type { ElectricalPoint, PlacedItem, Tool, ViewMode } from '../data/schema'
@@ -41,6 +41,7 @@ function findCanvas(): HTMLCanvasElement | null {
   )
 }
 
+/** Top-centre toolbar: view modes, tools, toggles, settings, save / load / screenshot / help. */
 export default function Toolbar() {
   const mode = useStore((s) => s.mode)
   const tool = useStore((s) => s.tool)
@@ -87,7 +88,11 @@ export default function Toolbar() {
     if (!f) return
     try {
       const { items, points } = parseProject(await f.text())
-      useStore.getState().replaceAll({ items: items as PlacedItem[], points: points as ElectricalPoint[] })
+      // parseProject checks the required fields; fill optional ones older / hand-edited files may lack
+      useStore.getState().replaceAll({
+        items: (items as PlacedItem[]).map((i) => ({ ...i, y: i.y ?? 0, rot: i.rot ?? 0 })),
+        points: (points as ElectricalPoint[]).map((p) => ({ ...p, nx: p.nx ?? 0, nz: p.nz ?? 0 })),
+      })
       setToast(`Loaded ${items.length} items, ${points.length} points`)
     } catch (err) {
       setToast(`Could not load: ${(err as Error).message}`)

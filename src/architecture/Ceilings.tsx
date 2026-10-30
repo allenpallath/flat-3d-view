@@ -1,12 +1,10 @@
-// OWNER: Architecture agent (A1). Ceilings per room (+ gypsum false-ceiling border in the hall).
-// Only shown in walk mode with showCeilings on.
+// Ceilings per room (+ gypsum false-ceiling border with an LED cove in the hall), tagged
+// {kind:'ceiling', roomId}. Only mounted in walk mode with showCeilings on.
 import planC from '../data/planC'
 import type { Rect } from '../data/schema'
 import { getMaterials } from '../materials/materials'
 import { useStore } from '../store'
-import { BMesh, useBuilt } from './common'
-
-const FILLS: { roomId: string; rect: Rect }[] = [{ roomId: 'hall', rect: { x1: 76, z1: 622, x2: 330, z2: 634 } }]
+import { BMesh, GAP_FILLS, useBuilt } from './common'
 
 /** Hall false ceiling: 55 cm wide gypsum border dropped 25 cm, with a cove lip along its inner edge. */
 const COVE = { roomId: 'hall', band: 55, drop: 25 }
@@ -41,6 +39,7 @@ function CeilingPatch({ roomId, rect }: { roomId: string; rect: Rect }) {
   return <BMesh built={built} tag={{ kind: 'ceiling', roomId }} />
 }
 
+/** Ceilings of every room (walk mode only). */
 export default function Ceilings() {
   const visible = useStore((s) => s.mode === 'walk' && s.showCeilings)
   // unmounted (not just hidden) so raycasts from above never hit them
@@ -50,7 +49,7 @@ export default function Ceilings() {
       {planC.rooms.map((r) => (
         <CeilingPatch key={r.id} roomId={r.id} rect={r.rect} />
       ))}
-      {FILLS.map((f, i) => (
+      {GAP_FILLS.map((f, i) => (
         <CeilingPatch key={`fill${i}`} roomId={f.roomId} rect={f.rect} />
       ))}
     </group>

@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). 3D layer: two-click tape measure with axis lock and endpoint snapping.
+// 3D layer: two-click tape measure with axis lock and endpoint snapping.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -267,6 +267,7 @@ function Interaction() {
   )
 }
 
+/** Finished measurements (always shown) + the interactive tape while the measure tool is active. */
 export default function MeasureTool() {
   const tool = useStore((s) => s.tool)
   const list = useMeasure((s) => s.list)

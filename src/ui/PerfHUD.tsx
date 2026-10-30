@@ -1,4 +1,4 @@
-// OWNER: UI & QA agent (A6). `?perf` overlay: fps, draw calls, triangles, geometries, textures, JS heap.
+// `?perf` overlay: fps, draw calls, triangles, geometries, textures, JS heap.
 // Shows "idle" when no frame was rendered for 1 s (frameloop="demand").
 import { useEffect, useState } from 'react'
 import { heapMB, PERF_ENABLED, perfClock, usePerf } from './perfStore'
@@ -32,6 +32,7 @@ function Overlay() {
   )
 }
 
+/** Perf overlay; renders nothing without `?perf`. */
 export default function PerfHUD() {
   return PERF_ENABLED ? <Overlay /> : null
 }

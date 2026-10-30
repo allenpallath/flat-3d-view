@@ -1,11 +1,10 @@
-// OWNER: Furniture Planner agent (A4).
 // Procedural furniture models built from primitives. Everything here is modelled in CENTIMETRES with
 // the origin at the footprint centre on the floor; the GeoBuilder bakes a 0.01 scale so the result
 // is in metres. Front of every item faces local +z. Parts stay inside w × d × h exactly.
 // Models push their parts into a GeoBuilder (see builder.ts); the result is merged into one
 // geometry per item (one group per material) and shared through geoCache.ts.
 import * as THREE from 'three'
-import { getMaterials, type MaterialKey } from '../materials/materials'
+import { getMaterials, registerVariant, type MaterialKey } from '../materials/materials'
 import { getEntry, type ModelKind } from './catalog'
 import { GeoBuilder, type BuiltGeometry } from './builder'
 
@@ -23,12 +22,13 @@ const cached = (key: string, make: () => Mat) => {
 }
 const M = (k: MaterialKey) => getMaterials()[k]
 
-/** A2 material, optionally re-coloured (clone cached per colour). */
+/** A getMaterials() material, optionally re-coloured (clone cached per colour). */
 export function tint(base: MaterialKey, color?: string): Mat {
   if (!color) return M(base)
   return cached(`tint|${base}|${color}`, () => {
     const m = M(base).clone() as THREE.MeshStandardMaterial
     m.color = new THREE.Color(color)
+    registerVariant(base, m) // gets the maps even if they arrive after this clone was made
     return m
   })
 }
@@ -523,7 +523,7 @@ const MODELS: Record<ModelKind, Model> = {
   mirror: Mirror,
 }
 
-/** Main (colour-overridable) material per model: an A2 key, or 'paint' = plain paint in the catalog colour. */
+/** Main (colour-overridable) material per model: a getMaterials() key, or 'paint' = plain paint in the catalog colour. */
 const MAIN: Record<ModelKind, MaterialKey | 'paint' | 'shade'> = {
   sofa: 'fabricBlue',
   lsofa: 'fabricBlue',
@@ -558,6 +558,7 @@ const MAIN: Record<ModelKind, MaterialKey | 'paint' | 'shade'> = {
   mirror: 'darkWood',
 }
 
+/** The colour-overridable main material of a catalog item (falls back to plain paint for unknown ids). */
 export function mainMaterial(catalogId: string, color?: string): Mat {
   const e = getEntry(catalogId)
   if (!e) return paint(color ?? '#9a9a9a', 0.7)

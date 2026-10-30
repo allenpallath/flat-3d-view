@@ -1,4 +1,6 @@
-// OWNER: Architecture agent (A1). Shared helpers for the architecture module.
+// Shared helpers for the architecture module: the plan-mode cut, a hook that builds and disposes merged
+// box geometry, a mesh wrapper, wall-local coordinates, rect / interval subtraction and a few
+// materials that getMaterials() does not list.
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import type { MeshTag, Rect, Wall } from '../data/schema'
@@ -9,17 +11,22 @@ import { GeoBuilder, type Built } from './builder'
 /** Height (cm) above which architecture is cut away in plan mode. */
 export const PLAN_CUT = 120
 
+/** Current cut height (cm): PLAN_CUT in plan mode, otherwise nothing is cut. */
 export function useCut() {
   const mode = useStore((s) => s.mode)
   return mode === 'plan' ? PLAN_CUT : Infinity
 }
 
+/**
+ * Run `fn` on a fresh GeoBuilder and return its merged opaque + transparent meshes. Rebuilt when
+ * `cut` or `deps` change (`fn` itself is deliberately not a dependency: callers pass inline closures);
+ * the previous geometry is disposed.
+ */
 export function useBuilt(fn: (b: GeoBuilder) => void, cut: number, deps: unknown[]) {
   const built = useMemo(() => {
     const b = new GeoBuilder(cut)
     fn(b)
     return { opaque: b.build('opaque'), transparent: b.build('transparent') }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cut, ...deps])
   useEffect(
     () => () => {
@@ -31,6 +38,7 @@ export function useBuilt(fn: (b: GeoBuilder) => void, cut: number, deps: unknown
   return built
 }
 
+/** The meshes of a useBuilt result: opaque (casts shadows) and transparent (drawn after, no shadow). */
 export function BMesh({
   built,
   tag,
@@ -58,7 +66,10 @@ export function BMesh({
   )
 }
 
-/** Wall-local frame: s = along the wall's long axis, t = across (thickness). */
+/**
+ * Wall-local frame: s = along the wall's long axis (absolute world x or z, cm), t = across the
+ * thickness (absolute z or x, from t0 to t1). Lets door / window code be written once for both axes.
+ */
 export function wallFrame(w: Wall) {
   const axis = wallAxis(w)
   const t0 = axis === 'x' ? w.rect.z1 : w.rect.x1
@@ -110,9 +121,16 @@ export function subtractIntervals(a: number, b: number, cuts: [number, number][]
   return segs.filter(([s0, s1]) => s1 - s0 > 0.5)
 }
 
+/**
+ * Floor / ceiling areas that belong to a room but lie outside every room rect: the open strip between
+ * the hall and the kitchen beside the short kitchen wall stub.
+ */
+export const GAP_FILLS: { roomId: string; rect: Rect }[] = [{ roomId: 'hall', rect: { x1: 76, z1: 622, x2: 330, z2: 634 } }]
+
 // ---------------------------------------------------------------------------
-// Local materials (not in getMaterials()). Proposed for adoption by A2.
+// Fittings materials that getMaterials() does not list (shared singletons, never disposed).
 let local: Record<'mirror' | 'blackGlass' | 'frosted' | 'chrome' | 'grout', THREE.Material> | null = null
+/** Mirror, black glass, frosted glass, chrome and grout for fittings. */
 export function localMaterials() {
   if (local) return local
   local = {

@@ -1,3 +1,6 @@
+// Shared PBR materials: getMaterials() returns one memoised material per surface key. Their texture
+// maps are generated procedurally in a Web Worker and attached when ready (flat colours until then).
+// Also patches three's shaders with an HDR guard, and adapts material cost to the quality setting.
 import * as THREE from 'three'
 import { invalidate } from '@react-three/fiber'
 import { useStore } from '../store'
@@ -20,7 +23,6 @@ if (!THREE.ShaderChunk.opaque_fragment.includes(HDR_GUARD)) {
   THREE.ShaderChunk.opaque_fragment += HDR_GUARD
 }
 
-// OWNER: Materials & Lighting agent (A2).
 // Contract: getMaterials() returns memoised singleton materials keyed by name.
 // Other modules must only use these keys (do not create ad-hoc materials for surfaces listed here).
 //
@@ -49,7 +51,7 @@ export type MaterialKey =
   | 'fabricLight' // bed linen, chairs
   | 'plant'
   | 'soil'
-  // ---- added by A2 (append-only) ----
+  // ---- extra surfaces ----
   | 'mirror' // bathroom mirror (reflects the environment map)
   | 'tvScreen' // glossy black TV panel (switched off)
   | 'rug' // light grey-beige pile rug
@@ -128,6 +130,32 @@ let resolveReady: () => void = () => {}
 /** Resolves once every procedural texture has been generated and applied. */
 export const texturesReady: Promise<void> = new Promise((r) => (resolveReady = r))
 
+/**
+ * Recoloured clones of base materials (e.g. furniture in a custom colour, see planner `tint()`).
+ * A clone made before its base material's maps arrive would otherwise stay flat forever, so
+ * applySet() gives every registered variant the same maps (keeping the variant's own colour).
+ */
+const variants: [MaterialKey, THREE.MeshStandardMaterial][] = []
+
+/** Register a recoloured clone of `getMaterials()[key]` so it receives the texture maps too. */
+export function registerVariant(key: MaterialKey, m: THREE.Material) {
+  variants.push([key, m as THREE.MeshStandardMaterial])
+}
+
+/** Put a set's maps on a material as described by its binding (colour is handled by the caller). */
+function bindMaps(m: THREE.MeshStandardMaterial, b: Binding, t: SetTextures) {
+  if (b.map !== false) m.map = t.map
+  if (b.rough !== false && t.rough) {
+    m.roughnessMap = t.rough
+    m.roughness = 1
+  }
+  if (b.normal !== false && t.normal) {
+    m.normalMap = t.normal
+    m.normalScale.setScalar(b.normalScale ?? 1)
+  }
+  m.needsUpdate = true
+}
+
 function applySet(name: TexSetName, raw: RawSet) {
   if (!cache) return
   const old = live.get(name)
@@ -139,24 +167,18 @@ function applySet(name: TexSetName, raw: RawSet) {
     invalidate()
     return
   }
-  const map = dataTex(raw.col, raw, true)
-  const rough = raw.rough ? dataTex(raw.rough, raw, false) : null
-  const normal = raw.normal ? dataTex(raw.normal, raw, false) : null
-  live.set(name, { map, rough, normal })
+  const t: SetTextures = {
+    map: dataTex(raw.col, raw, true),
+    rough: raw.rough ? dataTex(raw.rough, raw, false) : null,
+    normal: raw.normal ? dataTex(raw.normal, raw, false) : null,
+  }
+  live.set(name, t)
   for (const [key, b] of bindings) {
     if (b.set !== name) continue
     const m = cache[key] as THREE.MeshStandardMaterial
-    if (b.map !== false) m.map = map
-    if (b.rough !== false && rough) {
-      m.roughnessMap = rough
-      m.roughness = 1
-    }
-    if (b.normal !== false && normal) {
-      m.normalMap = normal
-      m.normalScale.setScalar(b.normalScale ?? 1)
-    }
+    bindMaps(m, b, t)
     m.color.set(b.tint)
-    m.needsUpdate = true
+    for (const [vk, v] of variants) if (vk === key) bindMaps(v, b, t)
   }
   invalidate() // frameloop="demand": show the new maps now
 }
@@ -275,6 +297,7 @@ function makeGlass() {
   return m
 }
 
+/** The shared materials, created on first call (which also starts texture generation). */
 export function getMaterials(): Record<MaterialKey, THREE.Material> {
   if (cache) return cache
 

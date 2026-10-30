@@ -1,5 +1,5 @@
-// OWNER: Architecture agent (A1). Doors (animated, clickable), main door, sliding glass doors,
-// windows and ventilators for every opening in planC.
+// Doors (animated, click to toggle), main door, sliding glass doors, windows and ventilators for every
+// opening in planC. Open state comes from the store (doorsOpen); frames and leaves are tagged as their wall.
 import { useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
@@ -30,6 +30,7 @@ function useOpenFactor(id: string) {
   return { open, k }
 }
 
+/** One animation step toward `target`: exponential ease plus a small constant so it actually arrives. */
 const step = (cur: number, target: number, dt: number, speed = 3) => {
   const d = target - cur
   if (Math.abs(d) < 1e-4) return target
@@ -49,7 +50,6 @@ function DoorFrame({ w, o, fr, F, cut }: { w: Wall; o: Opening; fr: Frame; F: nu
       b.b(fr.box(o.from, o.from + F, 0, o.head, t0, t1), m.darkWood)
       b.b(fr.box(o.to - F, o.to, 0, o.head, t0, t1), m.darkWood)
       b.b(fr.box(o.from + F, o.to - F, o.head - F, o.head, t0, t1), m.darkWood)
-      // door stop strip in the middle of the frame
       // architraves on both faces
       const A = 6
       for (const [a, c] of [
@@ -110,6 +110,11 @@ function buildLeaf(b: GeoBuilder, W: number, H: number, T: number, main: boolean
   }
 }
 
+/**
+ * Hinged door. The leaf is built in leaf-local cm (x along the leaf from the hinge, z across) inside a
+ * group at the hinge that rotates about y. thC is the closed angle (leaf pointing along the wall away
+ * from the hinge); `diff` the signed turn toward the swing side, wrapped to ±180° and stopped at 97 %.
+ */
 function HingedDoor({ w, o, cut }: { w: Wall; o: Opening; cut: number }) {
   const fr = wallFrame(w)
   const main = o.kind === 'mainDoor'
@@ -154,6 +159,7 @@ function HingedDoor({ w, o, cut }: { w: Wall; o: Opening; cut: number }) {
 // --------------------------------------------------------------------------------------------
 // Sliding glass doors
 
+/** Two-panel sliding glass door: panel A slides over panel B along the wall when opened. */
 function SlidingDoor({ w, o, cut }: { w: Wall; o: Opening; cut: number }) {
   const fr = wallFrame(w)
   const F = 5
@@ -223,6 +229,7 @@ function SlidingDoor({ w, o, cut }: { w: Wall; o: Opening; cut: number }) {
 // --------------------------------------------------------------------------------------------
 // Windows / ventilators
 
+/** Two-sash sliding window with a marble sill, or a louvred ventilator. */
 function Window({ w, o, cut }: { w: Wall; o: Opening; cut: number }) {
   const fr = wallFrame(w)
   const built = useBuilt(
@@ -280,6 +287,7 @@ function Window({ w, o, cut }: { w: Wall; o: Opening; cut: number }) {
   return <BMesh built={built} tag={{ kind: 'wall', wallId: w.id }} />
 }
 
+/** The leaf / frame / glazing of every opening in the plan. */
 export default function Openings() {
   const cut = useCut()
   return (

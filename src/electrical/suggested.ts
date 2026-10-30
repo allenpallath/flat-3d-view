@@ -1,4 +1,3 @@
-// OWNER: Electrical Planner agent (A5).
 // A sensible starter set of points for flat type C. Positions are computed from the
 // room rects (each room rect side coincides with the interior face of its wall).
 import type { ElectricalPoint, Plan, PointType } from '../data/schema'
@@ -7,6 +6,7 @@ import { findWallFace } from './wallMath'
 type NewPoint = Omit<ElectricalPoint, 'id'>
 type RoomSide = 'N' | 'S' | 'E' | 'W'
 
+/** The suggested starter points ("Load suggested points"), without ids. */
 export function suggestedPoints(plan: Plan): NewPoint[] {
   const out: NewPoint[] = []
   const room = (id: string) => {

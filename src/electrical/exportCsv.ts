@@ -1,10 +1,13 @@
-// OWNER: Electrical Planner agent (A5). Pure import/export helpers (unit tested).
+// Pure import / export of electrical points (unit-tested): the electrician's CSV schedule and the
+// JSON points file (also accepts a whole Save/Load project file).
 import type { ElectricalPoint, Plan, PointType } from '../data/schema'
 import { PRESETS } from './presets'
 import { alongInfo, ceilingInfo, isCeilingPoint, roomForPoint, sideLabel, wallSide } from './wallMath'
 
+/** Header row of the CSV schedule. */
 export const CSV_COLUMNS = ['Room', 'Type', 'Wall', 'Height_cm', 'Distance_from_left_corner_cm', 'X_cm', 'Z_cm', 'Note'] as const
 
+/** Quote a CSV field when it contains a comma, quote or newline (RFC 4180). */
 export function csvEscape(v: string | number | undefined | null): string {
   const s = v === undefined || v === null ? '' : String(v)
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
@@ -62,6 +65,7 @@ export function pointRows(points: ElectricalPoint[], plan: Plan): PointRow[] {
   })
 }
 
+/** The CSV schedule (CRLF line endings, header row first). */
 export function pointsToCsv(points: ElectricalPoint[], plan: Plan): string {
   const lines = [CSV_COLUMNS.join(',')]
   for (const r of pointRows(points, plan)) {
@@ -77,6 +81,7 @@ export interface PointsFile {
   points: ElectricalPoint[]
 }
 
+/** The JSON points file. */
 export function pointsToJson(points: ElectricalPoint[], now = new Date()): string {
   const f: PointsFile = { format: 'flat-c-electrical', version: 1, exportedAt: now.toISOString(), points }
   return JSON.stringify(f, null, 2)

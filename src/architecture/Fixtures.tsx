@@ -1,10 +1,10 @@
-// OWNER: Architecture agent (A1). Fixed fixtures from planC.fixtures, modelled from primitives:
+// Fixed fixtures from planC.fixtures, modelled from primitives and tagged {kind:'fixture', fixtureId}:
 // kitchen counters + wall cabinets, hob, sink, chimney, breakfast counter, vanities with mirrors,
 // wall-hung WCs, shower glass/drain/rain shower, balcony planters.
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import planC from '../data/planC'
-import { wallAxis } from '../data/geometry'
+import { rectsOverlap, wallAxis } from '../data/geometry'
 import type { Fixture, MeshTag, Rect, Room } from '../data/schema'
 import { toM } from '../data/schema'
 import { getMaterials } from '../materials/materials'
@@ -12,7 +12,7 @@ import type { GeoBuilder } from './builder'
 import { BMesh, localMaterials, subtractIntervals, subtractRect, useBuilt, useCut } from './common'
 
 type Edge = 'x1' | 'x2' | 'z1' | 'z2'
-const TOL = 1.5
+const TOL = 1.5 // cm: edges this close count as touching
 
 const roomOf = (f: Fixture): Room => planC.rooms.find((r) => r.id === f.room) ?? planC.rooms[0]
 
@@ -75,7 +75,7 @@ function wallOpeningsOnLine(edge: Edge, line: number) {
     .flatMap((w) => w.openings ?? [])
 }
 
-const overlaps = (a: Rect, b: Rect) => a.x1 < b.x2 && a.x2 > b.x1 && a.z1 < b.z2 && a.z2 > b.z1
+const overlaps = rectsOverlap
 const tagOf = (f: Fixture): MeshTag => ({ kind: 'fixture', fixtureId: f.id })
 
 // ---------------------------------------------------------------------------------------------
@@ -170,6 +170,7 @@ function buildCounter(b: GeoBuilder, f: Fixture) {
 // ---------------------------------------------------------------------------------------------
 // Sink (bowl + tap), hob, chimney
 
+/** The kitchen counter a sink / hob sits in. */
 function hostCounter(f: Fixture) {
   return planC.fixtures.find((c) => c.type === 'kitchenCounter' && overlaps(c.rect, f.rect))
 }
@@ -213,8 +214,11 @@ function Hob({ f, cut }: { f: Fixture; cut: number }) {
   const m = getMaterials()
   const y = f.y ?? 90
   const built = useBuilt((b) => b.box([f.rect.x1, y, f.rect.z1], [f.rect.x2, y + 0.8, f.rect.z2], lm.blackGlass), cut, [f])
-  const host = hostCounter(f)
-  const F = fxFrame(f.rect, host ? wallEdge(host.rect, roomOf(host)) : 'x1')
+  // memoised so the burner layout below is not recomputed on every render
+  const F = useMemo(() => {
+    const host = hostCounter(f)
+    return fxFrame(f.rect, host ? wallEdge(host.rect, roomOf(host)) : 'x1')
+  }, [f])
   const burners = useMemo(() => {
     const out: { p: [number, number, number]; r: number }[] = []
     const us = [F.u0 + (F.u1 - F.u0) * 0.28, F.u0 + (F.u1 - F.u0) * 0.72]
@@ -337,6 +341,7 @@ function Vanity({ f, cut }: { f: Fixture; cut: number }) {
     ].map(([x, y]) => new THREE.Vector2(toM(x), toM(y)))
     return new THREE.LatheGeometry(pts, 40)
   }, [r])
+  useEffect(() => () => lathe.dispose(), [lathe])
   const uc = (F.u0 + F.u1) / 2
   const tag = tagOf(f)
   return (
@@ -536,6 +541,8 @@ function Planter({ f, cut }: { f: Fixture; cut: number }) {
     mesh.userData = tagOf(f)
     return mesh
   }, [spheres, f])
+  // the plant material is a shared getMaterials() singleton: only the geometry is ours to dispose
+  useEffect(() => () => inst.geometry.dispose(), [inst])
   return (
     <group>
       <BMesh built={built} tag={tagOf(f)} />
@@ -546,11 +553,13 @@ function Planter({ f, cut }: { f: Fixture; cut: number }) {
 
 // ---------------------------------------------------------------------------------------------
 
+/** A fixture that is just one useBuilt mesh from a build function. */
 function Generic({ f, cut, fn }: { f: Fixture; cut: number; fn: (b: GeoBuilder, f: Fixture) => void }) {
   const built = useBuilt((b) => fn(b, f), cut, [f, fn])
   return <BMesh built={built} tag={tagOf(f)} />
 }
 
+/** Every fixture of the plan. */
 export default function Fixtures() {
   const cut = useCut()
   return (
