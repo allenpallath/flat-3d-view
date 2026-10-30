@@ -151,7 +151,7 @@ let currentQuality: Quality = 'high'
  */
 function makeGlass() {
   const m = new THREE.MeshPhysicalMaterial({
-    color: '#0d1a1c', // faint blue-green body tint
+    color: '#091214', // faint blue-green body tint
     metalness: 0,
     roughness: 0.03,
     ior: 1.5,
